@@ -3,31 +3,35 @@ package com.skillhub.entity;
 import jakarta.persistence.*;
 import lombok.Data;
 import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "category")
+@Table(name = "notification")
 @Data
-public class Category {
+public class Notification {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false)
-    private String name;
+    @Column(length = 100)
+    private String userId;
 
-    @Column(length = 500)
-    private String description;
+    @Column(length = 50)
+    private String event;
 
-    private Integer sortOrder = 0;
+    private Long skillId;
+
+    @Column(length = 100)
+    private String skillName;
+
+    @Column(length = 1000)
+    private String message;
+
+    private Boolean read = false;
 
     @CreationTimestamp
     @Column(updatable = false)
     private LocalDateTime createdAt;
-
-    @UpdateTimestamp
-    private LocalDateTime updatedAt;
 }

@@ -50,9 +50,6 @@ public class SkillVersion {
     @Column(length = 1000)
     private String skillDescriptionSnapshot;
 
-    @Column(length = 500)
-    private String iconUrlSnapshot;
-
     @CreationTimestamp
     @Column(updatable = false)
     private LocalDateTime createdAt;

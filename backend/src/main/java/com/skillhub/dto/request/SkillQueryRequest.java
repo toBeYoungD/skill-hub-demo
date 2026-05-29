@@ -6,6 +6,5 @@ import com.skillhub.entity.Skill;
 @Data
 public class SkillQueryRequest {
     private String name;
-    private Long categoryId;
     private Skill.SkillStatus status;
 }

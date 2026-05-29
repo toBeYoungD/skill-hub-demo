@@ -1,7 +1,6 @@
 package com.skillhub.repository;
 
 import com.skillhub.entity.Skill;
-import com.skillhub.entity.SkillVersion;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Modifying;
@@ -30,4 +29,8 @@ public interface SkillRepository extends JpaRepository<Skill, Long>, JpaSpecific
     boolean existsByName(String name);
 
     Optional<Skill> findByName(String name);
+
+    List<Skill> findByStatusAndDelistedFalse(Skill.SkillStatus status);
+
+    List<Skill> findByDeveloperAndDelistedFalse(String developer);
 }

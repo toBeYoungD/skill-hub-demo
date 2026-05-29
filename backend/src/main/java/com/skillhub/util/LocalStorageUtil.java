@@ -117,6 +117,10 @@ public class LocalStorageUtil {
         return baseDirectory.toString();
     }
 
+    public Path resolvePath(String relativePath) {
+        return baseDirectory.resolve(relativePath);
+    }
+
     @PreDestroy
     public void destroy() {
         log.info("本地文件存储关闭");

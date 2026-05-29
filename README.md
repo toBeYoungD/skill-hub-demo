@@ -1,95 +1,61 @@
 # Skill Hub Demo
 
-公司内部技能管理系统，基于 Java 17 + Spring Boot 3 + H2 内存数据库。
-
-## 项目结构
-
-```
-skill-demo/
-├── backend/                         # Java 后端
-│   ├── src/main/java/com/skillhub/
-│   │   ├── SkillHubApplication.java # 启动类
-│   │   ├── entity/                  # Skill, SkillVersion, Category
-│   │   ├── dto/request/             # 请求 DTO
-│   │   ├── repository/             # JPA Repository
-│   │   ├── service/                # SkillService, CategoryService
-│   │   ├── controller/             # REST API
-│   │   ├── config/                 # WebConfig (CORS)
-│   │   └── util/                   # LocalStorageUtil, VersionUtil
-│   └── src/main/resources/
-│       ├── application.yml         # 配置
-│       └── data.sql               # 初始分类数据
-│
-├── frontend/                       # 原生 JS 前端（用于测试）
-│   ├── index.html
-│   ├── css/style.css
-│   └── js/app.js
-│
-└── storage/                        # 本地文件存储（图标、技能包）
-    ├── icons/
-    ├── packages/
-    └── manifests/
-```
+公司内部技能管理系统，Java 17 + Spring Boot 3.1.5 + H2。
 
 ## 启动
 
 ```cmd
 set JAVA_HOME=C:\Program Files\Eclipse Adoptium\jdk-17.0.19.10-hotspot
 set PATH=%JAVA_HOME%\bin;%PATH%
-cd backend
-gradlew.bat bootRun
+cd backend && gradlew.bat bootRun
 ```
+前端：`cd frontend && npx http-server -p 3000` → `http://localhost:3000`
 
-前端（另开终端）：
-```cmd
-cd frontend
-npx http-server -p 3000
+## 状态机
+
 ```
-
-浏览器访问 `http://localhost:3000`。
+DRAFT → PENDING_REVIEW → PUBLISHED ─→ DELISTED
+  ↑          │               │
+  └── REJECTED ←─────────────┘
+```
 
 ## API
 
-### 技能
+### 技能 `/api/skills`
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/api/skills` | 创建技能 |
-| GET | `/api/skills` | 查询列表（?name=&status=&categoryId=） |
-| GET | `/api/skills/{id}` | 技能详情 |
-| PUT | `/api/skills/{id}` | 更新技能（JSON 或 multipart） |
-| DELETE | `/api/skills/{id}` | 删除技能 |
-| POST | `/api/skills/{id}/publish` | 发布新版本 |
-| GET | `/api/skills/{id}/export` | 导出为 .zip（标准 skill 格式） |
+| POST | / | 创建（name/description/developer 必填，packageFile 可选） |
+| GET | / | 列表（?name=&status=） |
+| GET | /{id} | 详情 |
+| PUT | /{id} | 更新（JSON 或 multipart） |
+| DELETE | /{id} | 删除（仅 DRAFT/REJECTED） |
+| POST | /{id}/publish | 提交审批 |
+| GET | /{id}/review-history | 审批历史 |
+| GET | /{id}/export | 导出 ZIP |
 
-### 版本
+### 管理台 `/api/admin`
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/skills/{id}/versions` | 版本列表 |
-| POST | `/api/skills/{id}/versions/{vid}/rollback` | 回滚到此版本 |
-| DELETE | `/api/skills/{id}/versions/{vid}` | 删除版本 |
+| GET | /reviews | 审批列表（?status=PENDING） |
+| POST | /reviews/{id}/approve | 通过 |
+| POST | /reviews/{id}/reject | 拒绝 `{reason}` |
+| POST | /skills/{id}/delist | 下架 `{reason}` |
+| POST | /skills/{id}/restore | 恢复 |
 
-### 分类
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/categories` | 分类列表 |
-| POST | `/api/categories` | 创建分类 |
-| PUT | `/api/categories/{id}` | 更新分类 |
-| DELETE | `/api/categories/{id}` | 删除分类 |
+### 通知 `/api/notifications`
+| GET | / | 列表 | POST | /{id}/read | 已读 | POST | /read-all |
 
-## 核心业务规则
+### 集成 `/api/integration`
+| POST | /batch-check | 批量检测下架/升级 |
+| GET | /changelog?since= | 增量变更日志 |
 
-- **创建**：名称必填且唯一，分类必填，版本默认 `1`
-- **发布**：只有编辑过内容（`updatedAt > lastPublishedAt`）才能发布，每次发布版本号 +1
-- **回滚**：恢复到目标版本的名称、描述、图标、技能包，并创建新版本记录
-- **文件**：创建/编辑时上传，发布时沿用上一版本文件，导出时按标准 skill 目录结构打包
-- **导出**：输出标准 skill ZIP 包（SKILL.md + scripts/ + resources/）
+## 预留接口
 
-## 数据库
-
-H2 内存数据库，`ddl-auto: create-drop`，每次重启数据重置。
-
-H2 控制台：`http://localhost:8080/h2-console`，JDBC URL `jdbc:h2:mem:skillhub`，用户名 `sa`，密码空。
+- `PermissionService` — 权限控制，Demo 实现从 `X-User-Id` header 读取，所有人均为管理员
+- `NotificationService` — 消息推送，Demo 存数据库
+- `SkillChangeListener` — 变更事件，Demo 打日志
+- `SkillPackageValidator` — 上传格式校验（zip 须含 SKILL.md + YAML frontmatter）
 
 ## 文件存储
 
-上传的文件保存在项目根目录下的 `storage/` 目录，按类型分 icons / packages / manifests 三个子目录。
+`storage/` 目录，分 icons/packages/manifests 子目录。UUID 重命名。

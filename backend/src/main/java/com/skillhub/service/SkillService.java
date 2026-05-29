@@ -3,14 +3,12 @@ package com.skillhub.service;
 import com.skillhub.dto.request.SkillCreateRequest;
 import com.skillhub.dto.request.SkillQueryRequest;
 import com.skillhub.dto.request.SkillUpdateRequest;
-import com.skillhub.entity.Category;
+import com.skillhub.entity.PublishRequest;
 import com.skillhub.entity.Skill;
 import com.skillhub.entity.SkillVersion;
-import com.skillhub.repository.CategoryRepository;
 import com.skillhub.repository.SkillRepository;
 import com.skillhub.repository.SkillVersionRepository;
 import com.skillhub.util.LocalStorageUtil;
-import com.skillhub.util.VersionUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -29,136 +27,63 @@ public class SkillService {
 
     private final SkillRepository skillRepository;
     private final SkillVersionRepository versionRepository;
-    private final CategoryRepository categoryRepository;
     private final LocalStorageUtil localStorageUtil;
-    private final VersionUtil versionUtil;
+    private final SkillPackageValidator skillPackageValidator;
+    private final PublishRequestService publishRequestService;
+    private final VisibilityService visibilityService;
 
     @Transactional
-    public Skill createSkill(SkillCreateRequest request, MultipartFile iconFile,
-                             MultipartFile packageFile, MultipartFile manifestFile) {
+    public Skill createSkill(SkillCreateRequest request, MultipartFile packageFile) {
 
-        // 1. 重名校验
         if (skillRepository.existsByName(request.getName())) {
             throw new RuntimeException("技能名称已存在: " + request.getName());
         }
 
-        // 2. 验证分类是否存在
-        if (request.getCategoryId() != null) {
-            categoryRepository.findById(request.getCategoryId())
-                    .orElseThrow(() -> new RuntimeException("分类不存在"));
-        }
-
-        // 2. 创建技能记录
         Skill skill = new Skill();
         skill.setName(request.getName());
         skill.setDescription(request.getDescription());
         skill.setDeveloper(request.getDeveloper());
-        skill.setCategoryId(request.getCategoryId());
+        skill.setVisibilityType(request.getVisibilityType() != null ? request.getVisibilityType() : "PUBLIC");
+        skill.setVisibilityConfig(request.getVisibilityConfig());
         skill.setStatus(Skill.SkillStatus.DRAFT);
 
-        // 3. 上传图标到本地存储
-        if (iconFile != null && !iconFile.isEmpty()) {
-            try {
-                String iconUrl = localStorageUtil.uploadIcon(iconFile);
-                skill.setIconUrl(iconUrl);
-            } catch (Exception e) {
-                log.error("图标上传失败", e);
-                throw new RuntimeException("图标上传失败: " + e.getMessage());
-            }
-        }
-
-        // 4. 上传技能包
         if (packageFile != null && !packageFile.isEmpty()) {
+            skillPackageValidator.validate(packageFile);
             try {
-                String packageUrl = localStorageUtil.uploadPackage(packageFile);
-                skill.setPackageUrl(packageUrl);
+                String url = localStorageUtil.uploadPackage(packageFile);
+                skill.setPackageUrl(url);
             } catch (Exception e) {
                 log.error("技能包上传失败", e);
                 throw new RuntimeException("技能包上传失败: " + e.getMessage());
             }
         }
 
-        // 5. 保存技能基本信息
         skill.setUpdatedAt(LocalDateTime.now());
         skill = skillRepository.save(skill);
-
         log.info("创建技能成功: {}", skill.getName());
         return skill;
     }
 
     @Transactional
-    public SkillVersion createSkillVersion(Skill skill, String version,
-                                           MultipartFile packageFile, MultipartFile manifestFile) {
-
-        SkillVersion skillVersion = new SkillVersion();
-        skillVersion.setSkill(skill);
-        skillVersion.setVersion(version);
-
-        // 上传文件到本地存储
-        if (packageFile != null && !packageFile.isEmpty()) {
-            try {
-                String packageUrl = localStorageUtil.uploadPackage(packageFile);
-                skillVersion.setPackageUrl(packageUrl);
-            } catch (Exception e) {
-                log.error("技能包上传失败", e);
-                throw new RuntimeException("技能包上传失败: " + e.getMessage());
-            }
-        }
-
-        if (manifestFile != null && !manifestFile.isEmpty()) {
-            try {
-                String manifestUrl = localStorageUtil.uploadManifest(manifestFile);
-                skillVersion.setManifestUrl(manifestUrl);
-            } catch (Exception e) {
-                log.error("manifest文件上传失败", e);
-                throw new RuntimeException("manifest文件上传失败: " + e.getMessage());
-            }
-        }
-
-        skillVersion.setStatus(SkillVersion.VersionStatus.DRAFT);
-        skillVersion = versionRepository.save(skillVersion);
-
-        log.info("创建技能版本成功: {} - {}", skill.getName(), version);
-        return skillVersion;
-    }
-
-    @Transactional
-    public Skill updateSkill(Long id, SkillUpdateRequest request, MultipartFile iconFile, MultipartFile packageFile) {
+    public Skill updateSkill(Long id, SkillUpdateRequest request, MultipartFile packageFile) {
         Skill skill = skillRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("技能不存在"));
 
+        if (request.getName() != null && !request.getName().isEmpty()
+                && !skill.getName().equals(request.getName())
+                && skillRepository.existsByName(request.getName())) {
+            throw new RuntimeException("技能名称已存在: " + request.getName());
+        }
+
         if (request.getName() != null && !request.getName().isEmpty()) {
-            // 重名校验，排除自身
-            if (!skill.getName().equals(request.getName()) && skillRepository.existsByName(request.getName())) {
-                throw new RuntimeException("技能名称已存在: " + request.getName());
-            }
             skill.setName(request.getName());
         }
         if (request.getDescription() != null && !request.getDescription().isEmpty()) {
             skill.setDescription(request.getDescription());
         }
-        if (request.getCategoryId() != null) {
-            categoryRepository.findById(request.getCategoryId())
-                    .orElseThrow(() -> new RuntimeException("分类不存在"));
-            skill.setCategoryId(request.getCategoryId());
-        }
-
-        if (iconFile != null && !iconFile.isEmpty()) {
-            try {
-                // 删除旧图标
-                if (skill.getIconUrl() != null) {
-                    localStorageUtil.deleteFile(skill.getIconUrl());
-                }
-                // 上传新图标
-                String iconUrl = localStorageUtil.uploadIcon(iconFile);
-                skill.setIconUrl(iconUrl);
-            } catch (Exception e) {
-                log.error("图标更新失败", e);
-                throw new RuntimeException("图标更新失败: " + e.getMessage());
-            }
-        }
 
         if (packageFile != null && !packageFile.isEmpty()) {
+            skillPackageValidator.validate(packageFile);
             try {
                 if (skill.getPackageUrl() != null) {
                     localStorageUtil.deleteFile(skill.getPackageUrl());
@@ -171,137 +96,36 @@ public class SkillService {
             }
         }
 
+        // 编辑时如果技能处于 PENDING_REVIEW，作废待审批的申请
+        if (skill.getStatus() == Skill.SkillStatus.PENDING_REVIEW) {
+            publishRequestService.cancelPendingRequests(skill.getId(), "技能内容已变更，旧申请自动作废");
+            skill.setStatus(Skill.SkillStatus.DRAFT);
+        }
+
         skill.setUpdatedAt(LocalDateTime.now());
-        Skill updatedSkill = skillRepository.save(skill);
+        skill = skillRepository.save(skill);
         log.info("更新技能成功: {}", skill.getName());
-        return updatedSkill;
+        return skill;
     }
 
     @Transactional
-    public void publishSkill(Long skillId, String changelog, VersionUtil.VersionType versionType) {
+    public Skill saveSkill(Long skillId) {
         Skill skill = skillRepository.findById(skillId)
                 .orElseThrow(() -> new RuntimeException("技能不存在"));
-
-        // 获取最新版本号
-        String latestVersion = null;
-        if (!skill.getVersions().isEmpty()) {
-            latestVersion = skill.getVersions().get(skill.getVersions().size() - 1).getVersion();
-        }
-
-        // 生成新版本号
-        String newVersionNumber = versionUtil.generateNextVersion(latestVersion, versionType);
-
-        // 取消所有版本的isLatest标记
-        skill.getVersions().forEach(version -> version.setLatest(false));
-
-        // 创建新版本，沿用上一版本的文件
-        SkillVersion newVersion = new SkillVersion();
-        newVersion.setSkill(skill);
-        newVersion.setVersion(newVersionNumber);
-        newVersion.setSkillNameSnapshot(skill.getName());
-        newVersion.setSkillDescriptionSnapshot(skill.getDescription());
-        newVersion.setIconUrlSnapshot(skill.getIconUrl());
-
-        // 从上一版本复制文件链接；若没有上一版本则用 skill 当前的
-        if (!skill.getVersions().isEmpty()) {
-            SkillVersion prev = skill.getVersions().get(skill.getVersions().size() - 1);
-            newVersion.setPackageUrl(prev.getPackageUrl());
-            newVersion.setManifestUrl(prev.getManifestUrl());
-        } else {
-            newVersion.setPackageUrl(skill.getPackageUrl());
-        }
-
-        newVersion.setChangelog(changelog != null ? changelog : String.format("版本 %s 发布", newVersionNumber));
-        newVersion.setStatus(SkillVersion.VersionStatus.PUBLISHED);
-        newVersion.setLatest(true);
-
-        newVersion = versionRepository.save(newVersion);
-        skill.getVersions().add(newVersion);
-
-        skill.setStatus(Skill.SkillStatus.PUBLISHED);
-        skill.setLastPublishedAt(LocalDateTime.now());
-        skillRepository.save(skill);
-
-        log.info("发布技能成功: {}, 版本: {}", skill.getName(), newVersionNumber);
+        skill.setStatus(Skill.SkillStatus.DRAFT);
+        skill.setUpdatedAt(LocalDateTime.now());
+        skill = skillRepository.save(skill);
+        log.info("保存技能为草稿: {}", skill.getName());
+        return skill;
     }
 
     @Transactional
-    public SkillVersion rollbackSkillVersion(Skill skill, SkillVersion targetVersion) {
-        // 获取最新版本号
-        String latestVersion = null;
-        if (!skill.getVersions().isEmpty()) {
-            latestVersion = skill.getVersions().get(skill.getVersions().size() - 1).getVersion();
-        }
-
-        // 生成新版本号（补丁版本）
-        String newVersionNumber = versionUtil.generateNextVersion(latestVersion, VersionUtil.VersionType.PATCH);
-
-        // 取消所有版本的isLatest标记
-        skill.getVersions().forEach(version -> version.setLatest(false));
-
-        // 创建回滚版本
-        SkillVersion rollbackVersion = new SkillVersion();
-        rollbackVersion.setSkill(skill);
-        rollbackVersion.setVersion(newVersionNumber);
-        rollbackVersion.setPackageUrl(targetVersion.getPackageUrl());
-        rollbackVersion.setManifestUrl(targetVersion.getManifestUrl());
-        rollbackVersion.setChangelog(String.format("从版本 %s 回滚", targetVersion.getVersion()));
-        rollbackVersion.setStatus(SkillVersion.VersionStatus.PUBLISHED);
-        rollbackVersion.setLatest(true);
-        rollbackVersion.setRollback(true);
-        rollbackVersion.setRolledBackFrom(targetVersion.getVersion());
-
-        rollbackVersion = versionRepository.save(rollbackVersion);
-        skill.getVersions().add(rollbackVersion);
-
-        // 恢复快照数据
-        if (targetVersion.getSkillNameSnapshot() != null) {
-            skill.setName(targetVersion.getSkillNameSnapshot());
-        }
-        if (targetVersion.getSkillDescriptionSnapshot() != null) {
-            skill.setDescription(targetVersion.getSkillDescriptionSnapshot());
-        }
-        if (targetVersion.getIconUrlSnapshot() != null) {
-            skill.setIconUrl(targetVersion.getIconUrlSnapshot());
-        }
-        if (targetVersion.getPackageUrl() != null) {
-            skill.setPackageUrl(targetVersion.getPackageUrl());
-        }
-        skill.setLastPublishedAt(LocalDateTime.now());
-        skillRepository.save(skill);
-
-        log.info("版本回滚成功: {} -> {}, 新版本: {}", targetVersion.getVersion(), newVersionNumber, newVersionNumber);
-        return rollbackVersion;
+    public void submitReview(Long skillId, String changelog) {
+        publishRequestService.submitReview(skillId, changelog);
     }
 
-    @Transactional
-    public void deleteSkillVersion(Skill skill, SkillVersion version) {
-        // 检查是否可以删除
-        if (version.isLatest() && version.getStatus() == SkillVersion.VersionStatus.PUBLISHED) {
-            throw new RuntimeException("不能删除最新的已发布版本");
-        }
-
-        // 删除关联的文件
-        if (version.getPackageUrl() != null) {
-            localStorageUtil.deleteFile(version.getPackageUrl());
-        }
-        if (version.getManifestUrl() != null) {
-            localStorageUtil.deleteFile(version.getManifestUrl());
-        }
-
-        // 删除版本
-        skill.getVersions().remove(version);
-        versionRepository.delete(version);
-
-        // 如果删除的是最新版本，标记前一个版本为最新
-        if (skill.getVersions().size() > 0) {
-            SkillVersion lastVersion = skill.getVersions().get(skill.getVersions().size() - 1);
-            lastVersion.setLatest(true);
-            versionRepository.save(lastVersion);
-        }
-
-        skillRepository.save(skill);
-        log.info("删除技能版本成功: {}", version.getVersion());
+    public List<PublishRequest> getReviewHistory(Long skillId) {
+        return publishRequestService.getReviewHistory(skillId);
     }
 
     @Transactional
@@ -309,17 +133,17 @@ public class SkillService {
         Skill skill = skillRepository.findById(skillId)
                 .orElseThrow(() -> new RuntimeException("技能不存在"));
 
-        // 删除本地存储的文件
-        if (skill.getIconUrl() != null) {
-            localStorageUtil.deleteFile(skill.getIconUrl());
+        if (skill.getStatus() != Skill.SkillStatus.DRAFT && skill.getStatus() != Skill.SkillStatus.REJECTED) {
+            throw new RuntimeException("只能删除草稿或未通过状态的技能，当前状态: " + skill.getStatus());
+        }
+
+        if (skill.getPackageUrl() != null) {
+            localStorageUtil.deleteFile(skill.getPackageUrl());
         }
 
         skill.getVersions().forEach(version -> {
             if (version.getPackageUrl() != null) {
                 localStorageUtil.deleteFile(version.getPackageUrl());
-            }
-            if (version.getManifestUrl() != null) {
-                localStorageUtil.deleteFile(version.getManifestUrl());
             }
         });
 
@@ -370,7 +194,49 @@ public class SkillService {
     }
 
     public List<Skill> getPublishedSkills() {
-        return skillRepository.findByStatus(Skill.SkillStatus.PUBLISHED);
+        return skillRepository.findByStatusAndDelistedFalse(Skill.SkillStatus.PUBLISHED);
+    }
+
+    @Transactional
+    public SkillVersion rollbackSkillVersion(Skill skill, SkillVersion targetVersion) {
+        String latestVersion = null;
+        if (!skill.getVersions().isEmpty())
+            latestVersion = skill.getVersions().get(skill.getVersions().size() - 1).getVersion();
+        String newVersion = String.valueOf(latestVersion == null ? 1 : Integer.parseInt(latestVersion) + 1);
+
+        skill.getVersions().forEach(v -> v.setLatest(false));
+
+        SkillVersion rollbackVersion = new SkillVersion();
+        rollbackVersion.setSkill(skill);
+        rollbackVersion.setVersion(newVersion);
+        rollbackVersion.setPackageUrl(targetVersion.getPackageUrl());
+        rollbackVersion.setManifestUrl(targetVersion.getManifestUrl());
+        rollbackVersion.setChangelog("从版本 " + targetVersion.getVersion() + " 回滚");
+        rollbackVersion.setStatus(SkillVersion.VersionStatus.PUBLISHED);
+        rollbackVersion.setLatest(true);
+        rollbackVersion.setRollback(true);
+        rollbackVersion.setRolledBackFrom(targetVersion.getVersion());
+
+        skill.getVersions().add(rollbackVersion);
+
+        if (targetVersion.getSkillNameSnapshot() != null) skill.setName(targetVersion.getSkillNameSnapshot());
+        if (targetVersion.getSkillDescriptionSnapshot() != null) skill.setDescription(targetVersion.getSkillDescriptionSnapshot());
+        if (targetVersion.getPackageUrl() != null) skill.setPackageUrl(targetVersion.getPackageUrl());
+        skill.setLastPublishedAt(LocalDateTime.now());
+        skillRepository.save(skill);
+
+        return rollbackVersion;
+    }
+
+    @Transactional
+    public void deleteSkillVersion(Skill skill, SkillVersion version) {
+        if (version.isLatest() && version.getStatus() == SkillVersion.VersionStatus.PUBLISHED)
+            throw new RuntimeException("不能删除最新的已发布版本");
+        if (version.getPackageUrl() != null) localStorageUtil.deleteFile(version.getPackageUrl());
+        skill.getVersions().remove(version);
+        if (!skill.getVersions().isEmpty())
+            skill.getVersions().get(skill.getVersions().size() - 1).setLatest(true);
+        skillRepository.save(skill);
     }
 
     public java.io.File exportSkill(Long skillId) {
@@ -379,19 +245,14 @@ public class SkillService {
 
         try {
             java.io.File tempDir = new java.io.File(System.getProperty("java.io.tmpdir"), "skill-" + skillId);
-            if (tempDir.exists()) {
-                deleteDir(tempDir);
-            }
+            if (tempDir.exists()) deleteDir(tempDir);
             tempDir.mkdirs();
 
-            // 取最新版本号
             String latestVer = "1";
             if (!skill.getVersions().isEmpty()) {
-                SkillVersion latest = skill.getVersions().get(skill.getVersions().size() - 1);
-                latestVer = latest.getVersion();
+                latestVer = skill.getVersions().get(skill.getVersions().size() - 1).getVersion();
             }
 
-            // 1. SKILL.md（YAML frontmatter + 正文）
             StringBuilder md = new StringBuilder();
             md.append("---\n");
             md.append("name: ").append(sanitizeName(skill.getName())).append("\n");
@@ -399,42 +260,24 @@ public class SkillService {
             md.append("version: ").append(latestVer).append("\n");
             md.append("---\n\n");
             md.append("# ").append(skill.getName()).append("\n\n");
-            if (skill.getDescription() != null) {
-                md.append(skill.getDescription()).append("\n\n");
-            }
+            if (skill.getDescription() != null) md.append(skill.getDescription()).append("\n\n");
             md.append("## 基本信息\n\n");
             md.append("- 开发者: ").append(skill.getDeveloper() != null ? skill.getDeveloper() : "-").append("\n");
             md.append("- 状态: ").append(skill.getStatus()).append("\n");
             md.append("- 下载次数: ").append(skill.getDownloadCount()).append("\n");
-            md.append("- 使用次数: ").append(skill.getUseCount()).append("\n");
-            md.append("- 创建时间: ").append(skill.getCreatedAt()).append("\n\n");
-
+            md.append("- 使用次数: ").append(skill.getUseCount()).append("\n\n");
             md.append("## 版本历史\n\n");
             for (SkillVersion v : skill.getVersions()) {
-                md.append("- v").append(v.getVersion())
-                  .append(" (").append(v.getStatus()).append(")")
-                  .append(v.isRollback() ? " [回滚]" : "")
-                  .append(v.isLatest() ? " [最新]" : "").append("\n");
-                if (v.getChangelog() != null) {
-                    md.append("  - ").append(v.getChangelog()).append("\n");
-                }
-            }
-            if (skill.getVersions().isEmpty()) {
-                md.append("- 暂无版本\n");
+                md.append("- v").append(v.getVersion()).append(" (").append(v.getStatus()).append(")")
+                  .append(v.isRollback() ? " [回滚]" : "").append(v.isLatest() ? " [最新]" : "").append("\n");
+                if (v.getChangelog() != null) md.append("  - ").append(v.getChangelog()).append("\n");
             }
             java.nio.file.Files.writeString(new java.io.File(tempDir, "SKILL.md").toPath(), md.toString());
 
-            // 2. scripts/ 目录（存放技能包）
             java.io.File scriptsDir = new java.io.File(tempDir, "scripts");
             scriptsDir.mkdirs();
             copySkillFile(skill.getPackageUrl(), new java.io.File(scriptsDir, "package"));
 
-            // 3. resources/ 目录（存放图标）
-            java.io.File resourcesDir = new java.io.File(tempDir, "resources");
-            resourcesDir.mkdirs();
-            copySkillFile(skill.getIconUrl(), new java.io.File(resourcesDir, "icon"));
-
-            // 4. 打成 ZIP
             java.io.File zipFile = new java.io.File(tempDir.getParent(), "skill-" + skillId + ".zip");
             try (java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(
                     new java.io.FileOutputStream(zipFile))) {
@@ -479,11 +322,7 @@ public class SkillService {
     }
 
     private void deleteDir(java.io.File dir) {
-        if (dir.isDirectory()) {
-            for (java.io.File f : dir.listFiles()) {
-                deleteDir(f);
-            }
-        }
+        if (dir.isDirectory()) for (java.io.File f : dir.listFiles()) deleteDir(f);
         dir.delete();
     }
 }

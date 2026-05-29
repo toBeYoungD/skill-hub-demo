@@ -1,15 +1,11 @@
 package com.skillhub.controller;
 
-import com.skillhub.dto.request.SkillCreateRequest;
-import com.skillhub.dto.request.SkillQueryRequest;
-import com.skillhub.dto.request.SkillUpdateRequest;
+import com.skillhub.biz.SkillBiz;
+import com.skillhub.dto.request.*;
 import com.skillhub.entity.Skill;
-import com.skillhub.service.SkillService;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -23,257 +19,104 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/skills")
 @RequiredArgsConstructor
-@Slf4j
 public class SkillController {
 
-    private final SkillService skillService;
+    private final SkillBiz skillBiz;
 
     @PostMapping
-    public ResponseEntity<Map<String, Object>> createSkill(
+    public ResponseEntity<Map<String, Object>> create(
             @RequestParam("name") String name,
             @RequestParam("description") String description,
             @RequestParam("developer") String developer,
-            @RequestParam(value = "version", required = false, defaultValue = "1") String version,
             @RequestParam(value = "packageFile", required = false) MultipartFile packageFile,
             @RequestParam(value = "visibilityType", required = false, defaultValue = "PUBLIC") String visibilityType,
             @RequestParam(value = "visibilityConfig", required = false) String visibilityConfig) {
-
-        try {
-            SkillCreateRequest request = new SkillCreateRequest();
-            request.setName(name);
-            request.setDescription(description);
-            request.setDeveloper(developer);
-            request.setVersion(version);
-            request.setVisibilityType(visibilityType);
-            request.setVisibilityConfig(visibilityConfig);
-
-            Skill skill = skillService.createSkill(request, packageFile);
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("message", "技能创建成功");
-            response.put("data", skill);
-
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            log.error("创建技能失败", e);
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "创建技能失败: " + e.getMessage());
-            return ResponseEntity.badRequest().body(response);
-        }
-    }
-
-    @GetMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> getSkill(@PathVariable Long id) {
-        try {
-            Skill skill = skillService.getSkillDetail(id);
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("data", skill);
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            log.error("获取技能失败", e);
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "获取技能失败: " + e.getMessage());
-            return ResponseEntity.badRequest().body(response);
-        }
+        SkillCreateRequest req = new SkillCreateRequest();
+        req.setName(name); req.setDescription(description); req.setDeveloper(developer);
+        req.setVisibilityType(visibilityType); req.setVisibilityConfig(visibilityConfig);
+        return ok(skillBiz.create(req, packageFile));
     }
 
     @GetMapping
-    public ResponseEntity<Map<String, Object>> getSkills(
+    public ResponseEntity<Map<String, Object>> list(
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String status,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "10") int size) {
+        SkillQueryRequest req = new SkillQueryRequest();
+        req.setName(name);
+        req.setStatus(status != null ? Skill.SkillStatus.valueOf(status) : null);
+        Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
+        var result = skillBiz.list(req, pageable);
+        return ok(result.getContent(), Map.of("total", result.getTotalElements(), "page", page, "size", size));
+    }
 
-        try {
-            SkillQueryRequest request = new SkillQueryRequest();
-            request.setName(name);
-            request.setStatus(status != null ? Skill.SkillStatus.valueOf(status) : null);
-
-            Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
-            Page<Skill> skills = skillService.getSkills(request, pageable);
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("data", skills.getContent());
-            response.put("total", skills.getTotalElements());
-            response.put("page", page);
-            response.put("size", size);
-
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            log.error("查询技能列表失败", e);
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "查询技能列表失败: " + e.getMessage());
-            return ResponseEntity.badRequest().body(response);
-        }
+    @GetMapping("/{id}")
+    public ResponseEntity<Map<String, Object>> detail(@PathVariable Long id) {
+        return ok(skillBiz.detail(id));
     }
 
     @GetMapping("/published")
-    public ResponseEntity<Map<String, Object>> getPublishedSkills() {
-        try {
-            var skills = skillService.getPublishedSkills();
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("data", skills);
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            log.error("获取已发布技能失败", e);
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "获取已发布技能失败: " + e.getMessage());
-            return ResponseEntity.badRequest().body(response);
-        }
+    public ResponseEntity<Map<String, Object>> published() {
+        return ok(skillBiz.list(new SkillQueryRequest(), Pageable.unpaged()).getContent());
     }
 
     @PutMapping(value = "/{id}", consumes = "application/json")
-    public ResponseEntity<Map<String, Object>> updateSkillJson(
-            @PathVariable Long id,
-            @RequestBody Map<String, String> body) {
-        try {
-            SkillUpdateRequest request = new SkillUpdateRequest();
-            request.setName(body.get("name"));
-            request.setDescription(body.get("description"));
-
-            Skill skill = skillService.updateSkill(id, request, null);
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("message", "技能更新成功");
-            response.put("data", skill);
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            log.error("更新技能失败", e);
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "更新技能失败: " + e.getMessage());
-            return ResponseEntity.badRequest().body(response);
-        }
+    public ResponseEntity<Map<String, Object>> updateJson(@PathVariable Long id, @RequestBody Map<String, String> body) {
+        SkillUpdateRequest req = new SkillUpdateRequest();
+        req.setName(body.get("name")); req.setDescription(body.get("description"));
+        return ok(skillBiz.update(id, req, null));
     }
 
     @PutMapping(value = "/{id}", consumes = "multipart/form-data")
-    public ResponseEntity<Map<String, Object>> updateSkill(
-            @PathVariable Long id,
+    public ResponseEntity<Map<String, Object>> updateFile(@PathVariable Long id,
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String description,
             @RequestParam(value = "packageFile", required = false) MultipartFile packageFile) {
-
-        try {
-            SkillUpdateRequest request = new SkillUpdateRequest();
-            request.setName(name);
-            request.setDescription(description);
-
-            Skill skill = skillService.updateSkill(id, request, packageFile);
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("message", "技能更新成功");
-            response.put("data", skill);
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            log.error("更新技能失败", e);
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "更新技能失败: " + e.getMessage());
-            return ResponseEntity.badRequest().body(response);
-        }
+        SkillUpdateRequest req = new SkillUpdateRequest();
+        req.setName(name); req.setDescription(description);
+        return ok(skillBiz.update(id, req, packageFile));
     }
 
     @PostMapping("/{id}/save")
-    public ResponseEntity<Map<String, Object>> saveSkill(@PathVariable Long id) {
-        try {
-            Skill skill = skillService.saveSkill(id);
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("message", "技能已保存");
-            response.put("data", skill);
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            log.error("保存技能失败", e);
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", e.getMessage());
-            return ResponseEntity.badRequest().body(response);
-        }
+    public ResponseEntity<Map<String, Object>> save(@PathVariable Long id) {
+        return ok(skillBiz.saveAsDraft(id));
     }
 
     @PostMapping("/{id}/publish")
-    public ResponseEntity<Map<String, Object>> publishSkill(
-            @PathVariable Long id,
+    public ResponseEntity<Map<String, Object>> publish(@PathVariable Long id,
             @RequestParam(required = false) String changelog) {
-        try {
-            skillService.submitReview(id, changelog);
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("message", "已提交审批");
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            log.error("提交审批失败", e);
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "提交审批失败: " + e.getMessage());
-            return ResponseEntity.badRequest().body(response);
-        }
+        skillBiz.submitReview(id, changelog);
+        return okMsg("已提交审批");
     }
 
     @GetMapping("/{id}/review-history")
-    public ResponseEntity<Map<String, Object>> getReviewHistory(@PathVariable Long id) {
-        try {
-            var history = skillService.getReviewHistory(id);
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("data", history);
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", e.getMessage());
-            return ResponseEntity.badRequest().body(response);
-        }
+    public ResponseEntity<Map<String, Object>> reviewHistory(@PathVariable Long id) {
+        return ok(skillBiz.reviewHistory(id));
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> deleteSkill(@PathVariable Long id) {
-        try {
-            skillService.deleteSkill(id);
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("message", "技能删除成功");
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            log.error("删除技能失败", e);
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "删除技能失败: " + e.getMessage());
-            return ResponseEntity.badRequest().body(response);
-        }
-    }
-
-    @PostMapping("/{id}/download")
-    public ResponseEntity<Map<String, Object>> downloadSkill(@PathVariable Long id) {
-        skillService.incrementDownloadCount(id);
-        Map<String, Object> response = new HashMap<>();
-        response.put("success", true);
-        return ResponseEntity.ok(response);
-    }
-
-    @PostMapping("/{id}/use")
-    public ResponseEntity<Map<String, Object>> useSkill(@PathVariable Long id) {
-        skillService.incrementUseCount(id);
-        Map<String, Object> response = new HashMap<>();
-        response.put("success", true);
-        return ResponseEntity.ok(response);
+    public ResponseEntity<Map<String, Object>> delete(@PathVariable Long id) {
+        skillBiz.delete(id);
+        return okMsg("技能已删除");
     }
 
     @GetMapping("/{id}/export")
-    public ResponseEntity<Resource> exportSkill(@PathVariable Long id) {
-        java.io.File zip = skillService.exportSkill(id);
-        Resource resource = new FileSystemResource(zip);
+    public ResponseEntity<Resource> export(@PathVariable Long id) {
         return ResponseEntity.ok()
                 .header("Content-Disposition", "attachment; filename=skill-" + id + ".zip")
                 .header("Content-Type", "application/zip")
-                .body(resource);
+                .body(new FileSystemResource(skillBiz.export(id)));
+    }
+
+    private static ResponseEntity<Map<String, Object>> ok(Object data) {
+        return ResponseEntity.ok(Map.of("success", true, "data", data));
+    }
+    private static ResponseEntity<Map<String, Object>> ok(Object data, Map<String, Object> extra) {
+        var map = new HashMap<>(extra);
+        map.put("success", true); map.put("data", data);
+        return ResponseEntity.ok(map);
+    }
+    private static ResponseEntity<Map<String, Object>> okMsg(String msg) {
+        return ResponseEntity.ok(Map.of("success", true, "message", msg));
     }
 }

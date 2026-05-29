@@ -117,8 +117,10 @@ async function loadSkills() {
                 <div class="skill-actions">
                     <button class="btn btn-primary" onclick="viewSkill(${skill.id})">查看</button>
                     <button class="btn btn-secondary" onclick="editSkill(${skill.id})">编辑</button>
+                    ${skill.status !== 'DELISTED' ? `<button class="btn btn-info btn-sm" onclick="saveSkill(${skill.id})">保存</button>` : ''}
                     ${skill.canPublish ? `<button class="btn btn-success" onclick="publishSkill(${skill.id})">发布</button>` : ''}
-                    ${(skill.status === 'DRAFT' || skill.status === 'REJECTED') ? `<button class="btn btn-danger" onclick="deleteSkill(${skill.id})">删除</button>` : ''}
+                    ${(skill.status === 'DRAFT' || skill.status === 'REJECTED') && !skill.lastPublishedAt ? `<button class="btn btn-danger" onclick="deleteSkill(${skill.id})">删除</button>` : ''}
+                    <button class="btn btn-warning btn-sm" onclick="exportSkill(${skill.id})">导出</button>
                 </div>
             </div>
         `).join('');
@@ -273,6 +275,15 @@ async function deleteSkill(skillId) {
     } catch (e) { showToast(e.message, 'error'); }
 }
 
+// 保存为草稿
+async function saveSkill(skillId) {
+    try {
+        await apiRequest(`/skills/${skillId}/save`, { method: 'POST' });
+        showToast('已保存为草稿');
+        loadSkills();
+    } catch (e) { showToast(e.message, 'error'); }
+}
+
 // 导出
 function exportSkill(skillId) { window.open(`${API_BASE_URL}/skills/${skillId}/export`, '_blank'); }
 
@@ -294,6 +305,14 @@ async function deleteVersion(skillId, versionId) {
 }
 
 // 管理台
+function switchAdminTab(tab) {
+    document.querySelectorAll('.admin-panel').forEach(p => p.classList.remove('active'));
+    document.getElementById(`admin-${tab}-panel`).classList.add('active');
+    document.querySelectorAll('#admin-view .nav-btn').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
+    if (tab === 'reviews') loadReviews(); else loadAdminSkills();
+}
+
 async function loadReviews() {
     const list = document.getElementById('reviews-list');
     list.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
@@ -335,6 +354,40 @@ async function rejectReview(id) {
     catch (e) { showToast(e.message, 'error'); }
 }
 
+async function loadAdminSkills() {
+    const list = document.getElementById('admin-skills-list');
+    list.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    try {
+        const resp = await apiRequest('/skills');
+        const skills = resp.data;
+        list.innerHTML = skills.map(skill => `
+            <div class="review-card">
+                <div class="review-header">
+                    <strong>${skill.name}</strong>
+                    ${getStatusBadge(skill.status)}
+                </div>
+                <p>开发者: ${skill.developer || '-'} | 版本: ${getLatestVersion(skill)} | 创建: ${formatDate(skill.createdAt)}</p>
+                <div class="review-actions">
+                    ${skill.status === 'PUBLISHED' ? `<button class="btn btn-danger btn-sm" onclick="delistSkill(${skill.id})">下架</button>` : ''}
+                    ${skill.status === 'DELISTED' ? `<button class="btn btn-success btn-sm" onclick="restoreSkill(${skill.id})">恢复</button>` : ''}
+                </div>
+            </div>
+        `).join('');
+    } catch (e) { list.innerHTML = '<div class="empty-state"><h3>加载失败</h3></div>'; }
+}
+
+async function delistSkill(skillId) {
+    const reason = prompt('请输入下架原因:');
+    if (!reason) return;
+    try { await apiRequest(`/admin/skills/${skillId}/delist`, { method: 'POST', body: JSON.stringify({ reason }) }); showToast('已下架'); loadAdminSkills(); loadSkills(); }
+    catch (e) { showToast(e.message, 'error'); }
+}
+
+async function restoreSkill(skillId) {
+    try { await apiRequest(`/admin/skills/${skillId}/restore`, { method: 'POST' }); showToast('已恢复'); loadAdminSkills(); loadSkills(); }
+    catch (e) { showToast(e.message, 'error'); }
+}
+
 // 搜索
 document.getElementById('search-skill-btn').addEventListener('click', async () => {
     const name = document.getElementById('skill-search').value;
@@ -355,7 +408,7 @@ document.getElementById('search-skill-btn').addEventListener('click', async () =
                     <button class="btn btn-primary" onclick="viewSkill(${skill.id})">查看</button>
                     <button class="btn btn-secondary" onclick="editSkill(${skill.id})">编辑</button>
                     ${skill.canPublish ? `<button class="btn btn-success" onclick="publishSkill(${skill.id})">发布</button>` : ''}
-                    ${(skill.status === 'DRAFT' || skill.status === 'REJECTED') ? `<button class="btn btn-danger" onclick="deleteSkill(${skill.id})">删除</button>` : ''}
+                    ${(skill.status === 'DRAFT' || skill.status === 'REJECTED') && !skill.lastPublishedAt ? `<button class="btn btn-danger" onclick="deleteSkill(${skill.id})">删除</button>` : ''}
                     <button class="btn btn-warning btn-sm" onclick="exportSkill(${skill.id})">导出</button>
                 </div>
             </div>

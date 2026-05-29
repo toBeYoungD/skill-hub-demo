@@ -1,11 +1,22 @@
 server:
   port: 8080
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+  tomcat:
+    uri-encoding: UTF-8
 
 spring:
   application:
     name: skill-hub-demo
 
-  datasource:
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 500MB
+      max-request-size: 500MB
     url: jdbc:h2:mem:skillhub;DB_CLOSE_DELAY=-1
     driver-class-name: org.h2.Driver
     username: sa
@@ -24,11 +35,6 @@ spring:
       hibernate:
         format_sql: true
         dialect: org.hibernate.dialect.H2Dialect
-
-  servlet:
-    multipart:
-      max-file-size: 500MB
-      max-request-size: 500MB
 
 # 本地文件存储配置
 storage:

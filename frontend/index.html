@@ -61,17 +61,26 @@
             </div>
 
             <div id="admin-view" class="view">
-                <div class="action-bar"><h2>管理台 - 审批列表</h2></div>
-                <div class="search-bar">
-                    <select id="review-status-filter">
-                        <option value="">全部</option>
-                        <option value="PENDING">待审批</option>
-                        <option value="APPROVED">已通过</option>
-                        <option value="REJECTED">已拒绝</option>
-                    </select>
-                    <button class="btn btn-search" onclick="loadReviews()">刷新</button>
+                <div class="action-bar"><h2>管理台</h2></div>
+                <div class="admin-tabs">
+                    <button class="nav-btn active" onclick="switchAdminTab('reviews')">审批列表</button>
+                    <button class="nav-btn" onclick="switchAdminTab('skills')">技能下架/恢复</button>
                 </div>
-                <div id="reviews-list"></div>
+                <div id="admin-reviews-panel" class="admin-panel active">
+                    <div class="search-bar">
+                        <select id="review-status-filter">
+                            <option value="">全部</option>
+                            <option value="PENDING">待审批</option>
+                            <option value="APPROVED">已通过</option>
+                            <option value="REJECTED">已拒绝</option>
+                        </select>
+                        <button class="btn btn-search" onclick="loadReviews()">刷新</button>
+                    </div>
+                    <div id="reviews-list"></div>
+                </div>
+                <div id="admin-skills-panel" class="admin-panel">
+                    <div id="admin-skills-list"></div>
+                </div>
             </div>
         </main>
     </div>

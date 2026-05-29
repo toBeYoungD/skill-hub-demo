@@ -566,3 +566,13 @@ main {
     flex-direction: column;
     gap: 8px;
 }
+
+/* Admin sub-tabs */
+.admin-tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.admin-panel { display: none; }
+.admin-panel.active { display: block; }

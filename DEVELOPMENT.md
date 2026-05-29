@@ -1,6 +1,6 @@
-# 项目交接指南 — 供 AI 智能体使用
+# 项目开发指南
 
-> 本文档为接手开发的 AI 智能体提供完整的项目认知，包括架构、规范、所有集成点及实现指引。
+> 包含完整的分层规范、集成替换指引、代码模板、配置说明。
 
 ---
 
@@ -227,7 +227,7 @@ public interface SkillChangeListener {
 
 **替换方法：**
 1. 实现 `SkillChangeListener`，将事件发布到消息队列（Kafka/RocketMQ 等）
-2. 下游智能体消费这些事件，实时感知技能变化
+2. 下游服务消费这些事件，实时感知技能变化
 3. `/api/integration/changelog` API 可保留作为兜底查询
 
 ### 3.4 SkillPackageValidator — 技能包校验

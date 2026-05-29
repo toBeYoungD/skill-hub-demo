@@ -16,7 +16,7 @@ service/        ← 可替换服务接口+实现
 config/         ← Spring 配置、CORS、拦截器、全局异常处理
 security/       ← 权限接口+Demo 实现（可替换）
 integration/    ← 变更推送接口+Demo 实现（可替换）
-common/exception/ ← 业务异常
+common/exception/ ← 特定异常
 util/           ← 工具类
 ```
 
@@ -133,6 +133,7 @@ Content-Type: multipart/form-data
 | name | String | ✅ | 名称，不可重复 |
 | description | String | ✅ | 描述 |
 | developer | String | ✅ | 开发者 |
+| version | String | ❌ | 版本号，默认 "1" |
 | packageFile | File | ❌ | 技能包（.zip，须含 SKILL.md） |
 | visibilityType | String | ❌ | 默认 PUBLIC |
 | visibilityConfig | String | ❌ | |
@@ -163,7 +164,7 @@ PUT /api/skills/{id}
 
 支持两种 Content-Type：
 - `application/json`：`{"name":"xxx","description":"xxx"}`
-- `multipart/form-data`：参数同创建，全部可选
+- `multipart/form-data`：支持 name、description、packageFile，全部可选
 
 若技能处于 `PENDING_REVIEW`，编辑后自动作废旧审批申请。
 
@@ -260,9 +261,9 @@ GET  /api/skills/published        # 已发布且未下架的技能
 ## 4. 状态机与业务规则
 
 ```
-DRAFT → PENDING_REVIEW → PUBLISHED → DELISTED
-  ↑          │               │          ↑
-  └── REJECTED ←─────────────┘     (可恢复)
+DRAFT ──发布──→ PENDING_REVIEW ──通过──→ PUBLISHED ──下架──→ DELISTED
+  ↑                │                    │                      │
+  └── REJECTED ←──拒绝──┘               └──── 恢复 ───────────┘
 ```
 
 | 规则 | 说明 |
@@ -317,7 +318,10 @@ H2 内存数据库，`ddl-auto: create-drop`，每次重启数据重置。
 
 ## 8. 异常处理
 
-业务异常统一抛 `BizException`（`biz/` 包），`GlobalExceptionHandler`（`config/` 包）转换为 400 响应。Controller 层不需要自己 try-catch。
+- `BizException`（`biz/` 包）：业务通用异常，由 GlobalExceptionHandler 统一抓取返回 400
+- `SkillPackageValidationException`（`common/exception/` 包）：技能包校验失败异常
+
+Controller 层不需要自己 try-catch。
 
 ---
 

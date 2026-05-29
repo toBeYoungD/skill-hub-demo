@@ -23,14 +23,16 @@ service/        ← 可替换服务（接口 + Demo）
 config/         ← Spring 配置、异常拦截
 security/       ← 权限（接口 + Demo）
 integration/    ← 变更推送（接口 + Demo）
+common/exception/ ← 业务异常
+util/           ← 工具类
 ```
 
 ## 状态机
 
 ```
-DRAFT → PENDING_REVIEW → PUBLISHED ─→ DELISTED
-  ↑          │               │
-  └── REJECTED ←─────────────┘
+DRAFT ──发布──→ PENDING_REVIEW ──通过──→ PUBLISHED ──下架──→ DELISTED
+  ↑                │                    │                      │
+  └── REJECTED ←──拒绝──┘               └──── 恢复 ───────────┘
 ```
 
 ## 文档目录
@@ -38,10 +40,10 @@ DRAFT → PENDING_REVIEW → PUBLISHED ─→ DELISTED
 | 文档 | 用途 |
 |------|------|
 | [API-DOC.md](./API-DOC.md) | 完整接口文档：数据模型、全部 API、参数说明 |
-| [AI-HANDOVER.md](./AI-HANDOVER.md) | 开发指南：分层规范、替换点详解、代码模板、状态机 |
+| [DEVELOPMENT.md](./DEVELOPMENT.md) | 开发指南：分层规范、替换点详解、代码模板、状态机 |
 | [TEST-CASES.md](./TEST-CASES.md) | 手动测试用例 |
 
-## 测试
+## 核心业务规则
 
 - **创建**：名称唯一，默认版本 1，可上传 packageFile（zip，需含 SKILL.md + YAML frontmatter）
 - **发布 = 提交审批**：状态 → PENDING_REVIEW，创建 PublishRequest

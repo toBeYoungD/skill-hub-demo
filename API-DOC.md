@@ -2,86 +2,117 @@
 
 ## 1. 项目概述
 
-公司内部技能管理系统后台，基于 Java 17 + Spring Boot 3.1.5，前端仅作功能验证用途。核心功能包括技能 CRUD、版本发布与回滚、分类管理、文件存储和标准格式导出。
+公司内部技能管理系统后台，Java 17 + Spring Boot 3.1.5 + H2 内存数据库。
 
-### 技术栈
+### 项目架构
 
-| 层级 | 技术 |
-|------|------|
-| 语言 | Java 17 |
-| 框架 | Spring Boot 3.1.5 + Spring Data JPA |
-| 数据库 | H2 内存数据库（可替换为 MySQL） |
-| 文件存储 | 本地文件系统（可替换为 OSS） |
-| 构建 | Gradle 8.x（Gradle Wrapper 自带，无需手动安装） |
+```
+controller/     ← 薄层：参数→DTO→Biz→响应包装，无业务逻辑
+biz/            ← 业务核心：接口+实现，全部逻辑在此
+domain/         ← 领域实体（Skill, SkillVersion, PublishRequest, Notification, SkillChangeLog）
+dto/            ← 请求/响应 DTO
+repository/     ← JPA 数据访问
+service/        ← 可替换服务接口+实现
+config/         ← Spring 配置、CORS、拦截器、全局异常处理
+security/       ← 权限接口+Demo 实现（公司落地替换）
+integration/    ← 变更推送接口+Demo 实现（公司落地替换）
+common/exception/ ← 业务异常
+util/           ← 工具类
+```
 
 ### 启动
 
 ```cmd
 set JAVA_HOME=C:\Program Files\Eclipse Adoptium\jdk-17.0.19.10-hotspot
 set PATH=%JAVA_HOME%\bin;%PATH%
-cd backend
-gradlew.bat bootRun
+cd backend && gradlew.bat bootRun
 ```
 
-服务启动在 `http://localhost:8080`。前端测试页单独启动：
-
-```cmd
-cd frontend
-npx http-server -p 3000
-```
+前端测试页：`cd frontend && npx http-server -p 3000` → `http://localhost:3000`
 
 ---
 
 ## 2. 数据模型
 
-### 2.1 Skill（技能）
+### 2.1 Skill（技能） — `com.skillhub.domain.Skill`
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | id | Long | 主键，自增 |
-| name | String | 技能名称，唯一 |
+| name | String | 名称，唯一 |
 | description | String | 描述 |
-| iconUrl | String | 图标文件相对路径 |
-| packageUrl | String | 技能包文件相对路径 |
-| status | enum | DRAFT / PUBLISHED / ARCHIVED |
-| categoryId | Long | 关联分类 ID |
+| packageUrl | String | 技能包本地路径 |
+| status | enum | DRAFT / PENDING_REVIEW / PUBLISHED / REJECTED / DELISTED |
 | developer | String | 开发者 |
 | downloadCount | Integer | 下载次数 |
 | useCount | Integer | 使用次数 |
-| createdAt | LocalDateTime | 创建时间（自动） |
-| updatedAt | LocalDateTime | 最后编辑时间（手动维护） |
-| lastPublishedAt | LocalDateTime | 最后发布时间 |
+| visibilityType | String | PUBLIC / USER_LIST / DEPARTMENT / ROLE |
+| visibilityConfig | String | JSON 配置 |
+| delisted | Boolean | 逻辑删除标记 |
+| delistedReason | String | 下架原因 |
+| delistedAt | LocalDateTime | 下架时间 |
+| delistedBy | String | 下架操作人 |
+| createdAt | LocalDateTime | 创建时间（@CreationTimestamp） |
+| updatedAt | LocalDateTime | 更新时间（手动维护） |
+| lastPublishedAt | LocalDateTime | 最近发布时间 |
 | versions | List\<SkillVersion\> | 版本列表（一对多，级联） |
-| canPublish | boolean | `@Transient` 计算字段，不作为列存储 |
+| canPublish | boolean (@Transient) | 计算字段：updatedAt > lastPublishedAt 或从未发布 |
 
-### 2.2 SkillVersion（技能版本）
+### 2.2 SkillVersion（技能版本） — `com.skillhub.domain.SkillVersion`
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | id | Long | 主键 |
-| skill | Skill | 所属技能（ManyToOne，序列化时忽略） |
+| skill | Skill | 所属技能（@JsonIgnore） |
 | version | String | 版本号，整数（1, 2, 3...） |
 | packageUrl | String | 该版本技能包路径 |
-| manifestUrl | String | 保留字段 |
 | changelog | String | 更新日志 |
 | status | enum | DRAFT / PUBLISHED |
-| isLatest | boolean | 是否最新版本 |
+| isLatest | boolean | 是否最新 |
 | isRollback | boolean | 是否回滚版本 |
 | rolledBackFrom | String | 回滚来源版本号 |
-| skillNameSnapshot | String | 发布时的技能名称快照 |
-| skillDescriptionSnapshot | String | 发布时的技能描述快照 |
-| iconUrlSnapshot | String | 发布时的图标快照 |
-| createdAt | LocalDateTime | 创建时间 |
+| skillNameSnapshot | String | 发布时的名称快照 |
+| skillDescriptionSnapshot | String | 发布时的描述快照 |
+| createdAt | LocalDateTime | @CreationTimestamp |
 
-### 2.3 Category（分类）
+### 2.3 PublishRequest（审批记录） — `com.skillhub.domain.PublishRequest`
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | id | Long | 主键 |
-| name | String | 分类名称 |
-| description | String | 描述 |
-| sortOrder | Integer | 排序 |
-| createdAt / updatedAt | LocalDateTime | 自动时间戳 |
+| skillId | Long | 技能 ID |
+| skillName | String | 技能名称快照 |
+| changelog | String | 变更说明 |
+| status | enum | PENDING / APPROVED / REJECTED |
+| applicant | String | 申请人 |
+| reviewer | String | 审批人 |
+| rejectReason | String | 拒绝理由 |
+| skillUpdatedAtSnapshot | LocalDateTime | 提交时 skill.updatedAt（并发校验） |
+| createdAt | LocalDateTime | @CreationTimestamp |
+| reviewedAt | LocalDateTime | 审批时间 |
+
+### 2.4 Notification（通知） — `com.skillhub.domain.Notification`
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | Long | 主键 |
+| userId | String | 目标用户 |
+| event | String | APPROVED / REJECTED / DELISTED |
+| skillId | Long | 技能 ID |
+| skillName | String | 技能名称 |
+| message | String | 通知内容 |
+| read | Boolean | 是否已读 |
+| createdAt | LocalDateTime | @CreationTimestamp |
+
+### 2.5 SkillChangeLog（变更日志） — `com.skillhub.domain.SkillChangeLog`
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | Long | 主键 |
+| skillName | String | 技能名称 |
+| changeType | String | DELISTED / UPGRADED |
+| details | String (JSON) | 变更详情 |
+| createdAt | LocalDateTime | @CreationTimestamp |
 
 ---
 
@@ -89,18 +120,9 @@ npx http-server -p 3000
 
 基础路径：`http://localhost:8080/api`
 
-所有接口统一返回格式：
-
-```json
-{ "success": true, "message": "xxx", "data": {...} }
-// 或
-{ "success": false, "message": "错误信息" }
-```
-
-### 3.1 技能管理
+### 3.1 技能管理 — `SkillController` → `SkillBiz`
 
 #### 创建技能
-
 ```
 POST /api/skills
 Content-Type: multipart/form-data
@@ -111,283 +133,198 @@ Content-Type: multipart/form-data
 | name | String | ✅ | 名称，不可重复 |
 | description | String | ✅ | 描述 |
 | developer | String | ✅ | 开发者 |
-| categoryId | Long | ✅ | 分类 ID |
-| version | String | ❌ | 默认 "1" |
-| iconFile | File | ❌ | 图标 |
-| packageFile | File | ❌ | 技能包 |
+| packageFile | File | ❌ | 技能包（.zip，须含 SKILL.md） |
+| visibilityType | String | ❌ | 默认 PUBLIC |
+| visibilityConfig | String | ❌ | |
 
-创建后状态为 `DRAFT`，不会生成版本记录。
-
-**响应示例：**
-
-```json
-{
-  "success": true,
-  "message": "技能创建成功",
-  "data": {
-    "id": 1,
-    "name": "数据转换工具",
-    "description": "格式转换插件",
-    "status": "DRAFT",
-    "developer": "张三",
-    "iconUrl": "icons/icon_xxxx.png",
-    "packageUrl": "packages/package_xxxx.zip",
-    "versions": [],
-    "canPublish": true
-  }
-}
-```
+创建后状态为 `DRAFT`，不会生成版本记录。上传的 zip 会经过 SkillPackageValidator 校验。
 
 #### 查询技能列表
-
 ```
-GET /api/skills?name=&status=&categoryId=
+GET /api/skills?name=&status=
 ```
 
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|:--:|------|
-| name | String | ❌ | 模糊搜索 |
-| status | String | ❌ | DRAFT / PUBLISHED / ARCHIVED |
-| categoryId | Long | ❌ | 分类筛选 |
+| 参数 | 说明 |
+|------|------|
+| name | 模糊搜索 |
+| status | DRAFT / PENDING_REVIEW / PUBLISHED / REJECTED / DELISTED |
 
 #### 获取技能详情
-
 ```
 GET /api/skills/{id}
 ```
 
-返回完整数据，包括所有版本历史。
+返回完整数据，包括所有版本历史、审批历史。
 
 #### 更新技能
-
 ```
 PUT /api/skills/{id}
 ```
 
-支持两种请求方式：
+支持两种 Content-Type：
+- `application/json`：`{"name":"xxx","description":"xxx"}`
+- `multipart/form-data`：参数同创建，全部可选
 
-**无文件更新（JSON）：**
+若技能处于 `PENDING_REVIEW`，编辑后自动作废旧审批申请。
 
+#### 保存为草稿
 ```
-Content-Type: application/json
-```
-
-```json
-{ "name": "xxx", "description": "xxx", "categoryId": "1" }
-```
-
-**有文件更新（multipart）：**
-
-```
-Content-Type: multipart/form-data
+POST /api/skills/{id}/save
 ```
 
-参数同创建接口，全部可选。上传新文件会自动替换旧文件。
+若本已是 `DRAFT`，不刷新 `updatedAt`。若处于 `PENDING_REVIEW`，自动作废旧审批。
 
-> 更新成功后 `updatedAt` 被修改，`canPublish` 变为 `true`。
-
-#### 删除技能
-
-```
-DELETE /api/skills/{id}
-```
-
-同时删除关联的本地文件。
-
-#### 发布技能
-
+#### 提交审批（发布）
 ```
 POST /api/skills/{id}/publish
 Content-Type: multipart/form-data
 ```
 
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|:--:|------|
-| changelog | String | ❌ | 更新日志 |
+| 参数 | 说明 |
+|------|------|
+| changelog | 更新日志（可选） |
 
-发布逻辑：
-1. 版本号自动 +1（如 1 → 2 → 3）
-2. 快照当前技能的名称、描述、图标
-3. 文件沿用上一版本
-4. `lastPublishedAt` 设为当前时间，`canPublish` 变为 `false`
+状态变为 `PENDING_REVIEW`，创建 PublishRequest。只有 `canPublish=true` 时才能提交。
 
-> 只有 `canPublish = true` 时才能发布（即上次发布后有编辑过）。
+#### 查看审批历史
+```
+GET /api/skills/{id}/review-history
+```
+
+#### 删除技能
+```
+DELETE /api/skills/{id}
+```
+
+只能物理删除从未发布过的 DRAFT/REJECTED 状态技能。已发布过的只能下架。
 
 #### 导出技能
-
 ```
 GET /api/skills/{id}/export
 ```
 
-返回 ZIP 文件，目录结构：
-
-```
-skill-name/
-├── SKILL.md          # YAML frontmatter + Markdown 正文
-├── scripts/
-│   └── package       # 技能包文件
-└── resources/
-    └── icon          # 图标文件
-```
+返回 ZIP，结构：`SKILL.md + scripts/package`。
 
 #### 其他
-
 ```
-POST /api/skills/{id}/download    # 下载次数 +1
-POST /api/skills/{id}/use         # 使用次数 +1
-GET  /api/skills/published        # 获取所有已发布技能
+POST /api/skills/{id}/download    # 下载计数 +1
+POST /api/skills/{id}/use         # 使用计数 +1
+GET  /api/skills/published        # 已发布且未下架的技能
 ```
 
-### 3.2 版本管理
+### 3.2 版本管理 — `SkillVersionController` → `SkillBiz`
 
 基础路径：`/api/skills/{skillId}/versions`
 
-#### 版本列表
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | / | 版本列表（按版本号降序） |
+| GET | /{versionId} | 版本详情 |
+| POST | /{versionId}/rollback | 回滚到此版本（创建新版本，恢复快照数据） |
+| DELETE | /{versionId} | 删除版本（不能删最新已发布版本） |
 
-```
-GET /api/skills/{skillId}/versions
-```
+### 3.3 管理台 — `ReviewController` → `SkillBiz`
 
-已发布版本在前，按版本号降序排列。
+基础路径：`/api/admin`
 
-#### 版本详情
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | /reviews?status=PENDING | 审批列表 |
+| POST | /reviews/{id}/approve | 审批通过（执行发布逻辑，版本号+1） |
+| POST | /reviews/{id}/reject | 审批拒绝（body: `{"reason":"xxx"}`） |
+| POST | /skills/{id}/delist | 下架技能（body: `{"reason":"xxx"}`） |
+| POST | /skills/{id}/restore | 恢复下架技能 |
 
-```
-GET /api/skills/{skillId}/versions/{versionId}
-```
+### 3.4 通知 — `NotificationController` → `NotificationBiz`
 
-#### 回滚到指定版本
+基础路径：`/api/notifications`
 
-```
-POST /api/skills/{skillId}/versions/{versionId}/rollback
-```
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | / | 当前用户通知列表 |
+| GET | /unread-count | 未读数量 |
+| POST | /{id}/read | 标记已读 |
+| POST | /read-all | 全部已读 |
 
-回滚逻辑：
-1. 只能回滚到已发布版本
-2. 创建新版本，版本号 +1，标记 `isRollback = true`
-3. 恢复目标版本的：名称、描述、图标、技能包
-4. 新版本文件链接指向目标版本的文件
-5. `lastPublishedAt` 更新
+### 3.5 外部集成 — `IntegrationController` → `IntegrationBiz`
 
-#### 删除版本
+基础路径：`/api/integration`
 
-```
-DELETE /api/skills/{skillId}/versions/{versionId}
-```
-
-不能删除当前最新且已发布的版本。
-
-### 3.3 分类管理
-
-基础路径：`/api/categories`
-
-```
-GET    /api/categories              # 列表（按 sortOrder 升序）
-POST   /api/categories              # 创建（name 必填，description/sortOrder 可选）
-GET    /api/categories/{id}         # 详情
-PUT    /api/categories/{id}         # 更新
-DELETE /api/categories/{id}         # 删除
-```
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | /batch-check | 批量检测下架/可升级 |
+| GET | /changelog?since=ISO时间戳 | 增量变更日志 |
 
 ---
 
-## 4. 业务规则
+## 4. 状态机与业务规则
 
-| 规则 | 实现位置 |
-|------|----------|
-| 名称唯一性 | `SkillRepository.existsByName()`, service 中校验 |
-| 分类必填 | Controller 中 `@RequestParam("categoryId")` 不带 `required=false` |
-| 默认版本 "1" | Controller 中 `defaultValue = "1"` |
-| 发布判定 | `Skill.getCanPublish()` — `updatedAt > lastPublishedAt` 或从未发布 |
-| 时间戳管理 | `updatedAt` 在 create/update 中手动设，发布不变；`lastPublishedAt` 仅在发布时设 |
-| 版本号递增 | `VersionUtil.generateNextVersion()` — 当前版本 +1 |
-| 回滚快照 | 发布时存 name/description/iconUrl 到版本；回滚时写回 skill |
-| 文件沿用 | 发布时新版 `packageUrl` 复制自上一版或 skill 当前值 |
+```
+DRAFT → PENDING_REVIEW → PUBLISHED → DELISTED
+  ↑          │               │          ↑
+  └── REJECTED ←─────────────┘     (可恢复)
+```
+
+| 规则 | 说明 |
+|------|------|
+| 名称唯一性 | 创建/编辑时校验，编辑排除自身 |
+| 发布判定 | canPublish = updatedAt > lastPublishedAt 或从未发布 |
+| 版本递增 | 审批通过时版本号 +1（1→2→3） |
+| 文件沿用 | 发布时新版 packageUrl 复制自上一版本或 skill 当前值 |
+| 快照 | 发布时存 name/description 到 SkillVersion，回滚时恢复 |
+| 并发安全 | 审批时比对 skillUpdatedAtSnapshot，不一致则自动过期 |
+| 审批中编辑/保存 | 自动作废旧审批，技能回到 DRAFT |
+| 删除 vs 下架 | 从未发布→物理删除；发布过→只能下架 |
+| 下架 | 逻辑删除（delisted=true），写变更日志，通知开发者 |
 
 ---
 
-## 5. 文件存储
+## 5. 预留接口
 
-`LocalStorageUtil` 管理文件，路径规则：
+| 接口 | 包 | 说明 |
+|------|-----|------|
+| PermissionService | security/ | 权限控制，Demo 从 X-User-Id header 获取用户 |
+| NotificationService | service/ | 消息推送，Demo 存数据库 |
+| SkillChangeListener | integration/ | 变更事件，Demo 打日志 |
+| SkillPackageValidator | service/ | 上传格式校验 |
+
+公司落地时实现这些接口，替换掉 Demo 实现即可。
+
+---
+
+## 6. 文件存储
+
+`LocalStorageUtil`（`util/` 包），路径规则：
 
 ```
 storage/
-├── icons/       icon_{uuid}.ext     # 技能图标
-├── packages/    package_{uuid}.ext  # 技能包
-└── manifests/   manifest_{uuid}.ext # 保留
+├── icons/       icon_{uuid}.ext
+├── packages/    package_{uuid}.ext
+└── manifests/   manifest_{uuid}.ext
 ```
 
-上传时生成 UUID 文件名，保存相对路径到实体。删除技能或版本时同步删除文件。
-
-### 替换为 OSS
-
-改动仅需修改 `LocalStorageUtil`，保持接口签名不变：
-
-```java
-public String uploadIcon(MultipartFile file)   → OSS 上传
-public String uploadPackage(MultipartFile file) → OSS 上传
-public void deleteFile(String relativePath)     → OSS 删除
-public InputStream getFileInputStream(String path) → OSS 下载
-```
+替换为 OSS 只需修改此类，接口签名不变。
 
 ---
 
-## 6. 数据库
+## 7. 数据库
 
-默认使用 H2 内存数据库，`ddl-auto: create-drop`，启动自动建表，`data.sql` 插入 4 个默认分类。
+H2 内存数据库，`ddl-auto: create-drop`，每次重启数据重置。
 
-### 切换为 MySQL
-
-修改 `application.yml`：
-
-```yaml
-spring:
-  datasource:
-    url: jdbc:mysql://localhost:3306/skill_hub?useUnicode=true&characterEncoding=utf8
-    driver-class-name: com.mysql.cj.jdbc.Driver
-    username: root
-    password: your_password
-  jpa:
-    hibernate:
-      ddl-auto: update   # 不删表
-```
-
-并添加 MySQL 驱动依赖到 `build.gradle`。
+切换 MySQL：修改 `application.yml` 中 `datasource` 配置，`ddl-auto` 改为 `update`。
 
 ---
 
-## 7. 项目扩展指南
+## 8. 异常处理
 
-### 字段 add/replace 表
-
-所有以 `skill_` 为前缀的属性在 Skill 实体（`com.skillhub.entity.Skill`），以 `version_` 为前缀的在 SkillVersion 实体。
-
-### 接入权限系统
-
-在 Controller 方法上添加自定义注解即可：
-
-```java
-@GetMapping("/{id}")
-@RequirePermission("skill:view")   // 示例
-public ResponseEntity<...> getSkill(@PathVariable Long id) { ... }
-```
-
-### 添加搜索功能
-
-预留方式：`SkillRepository` 已继承 `JpaSpecificationExecutor`，可在 Service 中构建复杂查询条件，无需改 Controller。
-
-### 接入 Redis 缓存
-
-在 Service 层对 `getSkillDetail`、`getPublishedSkills` 等方法加 `@Cacheable` 注解即可。
+业务异常统一抛 `BizException`（`biz/` 包），`GlobalExceptionHandler`（`config/` 包）转换为 400 响应。Controller 层不需要自己 try-catch。
 
 ---
 
-## 8. 常见错误码
+## 9. 测试
 
-| 错误 | 原因 |
-|------|------|
-| `技能名称已存在` | 创建/编辑时名称重复 |
-| `分类不存在` | categoryId 指向不存在的分类 |
-| `不能删除最新的已发布版本` | 版本保护规则 |
-| `只能回滚到已发布的版本` | 回滚目标必须是 PUBLISHED 状态 |
-| `Maximum upload size exceeded` | 文件超过 500MB 限制，改 `application.yml` 中 `max-file-size` |
+```cmd
+gradlew test --tests "com.skillhub.SkillHubIntegrationTest"
+```
+
+18 个集成测试覆盖：创建、重名校验、编辑、保存、审批通过/拒绝、下架/恢复、导出、物理删除、并发校验、审批中保存作废。

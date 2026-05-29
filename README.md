@@ -14,23 +14,15 @@ cd backend && gradlew.bat bootRun
 ## 项目架构
 
 ```
-controller/          # 薄层：参数 → DTO → Biz → 响应包装，无业务逻辑
-biz/                 # 业务核心：接口 + 实现，全部逻辑在此
-  SkillBiz / SkillBizImpl
-  NotificationBiz / NotificationBizImpl
-  IntegrationBiz / IntegrationBizImpl
-  BizException
-config/              # CORS、Encoding、异常拦截、拦截器
-  GlobalExceptionHandler  # BizException → 400, 其他 → 500
-auth/                # 权限接口 + Demo 实现（可替换）
-  PermissionService / DemoPermissionService
-integration/         # 变更推送接口 + Demo 实现（可替换）
-  SkillChangeListener / LoggingSkillChangeListener
-service/             # 可替换服务接口 + 实现
-  NotificationService / NotificationServiceImpl
-  SkillPackageValidator / DefaultSkillPackageValidator
-  VisibilityService
-entity/  repository/  util/  dto/
+controller/     ← 薄层：参数 → DTO → Biz → 响应包装
+biz/            ← 业务核心：接口 + 实现，全部逻辑在此
+domain/         ← 领域实体
+dto/            ← 请求 DTO
+repository/     ← JPA 数据访问
+service/        ← 可替换服务（接口 + Demo）
+config/         ← Spring 配置、异常拦截
+security/       ← 权限（接口 + Demo）
+integration/    ← 变更推送（接口 + Demo）
 ```
 
 ## 状态机
@@ -41,30 +33,15 @@ DRAFT → PENDING_REVIEW → PUBLISHED ─→ DELISTED
   └── REJECTED ←─────────────┘
 ```
 
-## API
+## 文档目录
 
-### 技能 `/api/skills`
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | / | 创建 |
-| GET | / | 列表 (?name=&status=) |
-| GET | /{id} | 详情 |
-| PUT | /{id} | 更新（JSON 或 multipart） |
-| DELETE | /{id} | 物理删除（仅未发布过的 DRAFT/REJECTED） |
-| POST | /{id}/save | 保存为草稿 |
-| POST | /{id}/publish | 提交审批 |
-| GET | /{id}/review-history | 审批历史 |
-| GET | /{id}/export | 导出 ZIP（SKILL.md + scripts/package） |
+| 文档 | 用途 |
+|------|------|
+| [API-DOC.md](./API-DOC.md) | 完整接口文档：数据模型、全部 API、参数说明 |
+| [AI-HANDOVER.md](./AI-HANDOVER.md) | 开发指南：分层规范、替换点详解、代码模板、状态机 |
+| [TEST-CASES.md](./TEST-CASES.md) | 手动测试用例 |
 
-### 版本 `/api/skills/{id}/versions`
-| GET | / | 列表 | POST | /{vid}/rollback | 回滚 | DELETE | /{vid} | 删除 |
-
-### 管理台 `/api/admin`
-| GET | /reviews | 审批列表 | POST | /reviews/{id}/approve | 通过 | POST | /reviews/{id}/reject | 拒绝 | POST | /skills/{id}/delist | 下架 | POST | /skills/{id}/restore | 恢复 |
-
-### 通知 `/api/notifications` | 集成 `/api/integration`
-
-## 核心业务规则
+## 测试
 
 - **创建**：名称唯一，默认版本 1，可上传 packageFile（zip，需含 SKILL.md + YAML frontmatter）
 - **发布 = 提交审批**：状态 → PENDING_REVIEW，创建 PublishRequest

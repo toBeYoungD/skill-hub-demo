@@ -2,8 +2,8 @@ package com.skillhub.controller;
 
 import com.skillhub.biz.BizException;
 import com.skillhub.biz.SkillBiz;
-import com.skillhub.entity.Skill;
-import com.skillhub.entity.SkillVersion;
+import com.skillhub.domain.Skill;
+import com.skillhub.domain.SkillVersion;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;

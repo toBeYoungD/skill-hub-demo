@@ -1,6 +1,6 @@
 package com.skillhub.service;
 
-import com.skillhub.exception.SkillPackageValidationException;
+import com.skillhub.common.exception.SkillPackageValidationException;
 import org.springframework.web.multipart.MultipartFile;
 
 public interface SkillPackageValidator {

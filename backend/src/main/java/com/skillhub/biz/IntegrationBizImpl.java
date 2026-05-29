@@ -1,8 +1,8 @@
 package com.skillhub.biz;
 
-import com.skillhub.dto.request.BatchCheckRequest;
-import com.skillhub.entity.Skill;
-import com.skillhub.entity.SkillChangeLog;
+import com.skillhub.dto.BatchCheckRequest;
+import com.skillhub.domain.Skill;
+import com.skillhub.domain.SkillChangeLog;
 import com.skillhub.repository.SkillChangeLogRepository;
 import com.skillhub.repository.SkillRepository;
 import lombok.RequiredArgsConstructor;

@@ -1,6 +1,6 @@
 package com.skillhub.biz;
 
-import com.skillhub.entity.Notification;
+import com.skillhub.domain.Notification;
 import java.util.List;
 
 public interface NotificationBiz {

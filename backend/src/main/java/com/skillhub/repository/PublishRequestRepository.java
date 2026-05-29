@@ -1,6 +1,6 @@
 package com.skillhub.repository;
 
-import com.skillhub.entity.PublishRequest;
+import com.skillhub.domain.PublishRequest;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

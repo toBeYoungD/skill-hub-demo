@@ -1,7 +1,7 @@
-package com.skillhub.dto.request;
+package com.skillhub.dto;
 
 import lombok.Data;
-import com.skillhub.entity.Skill;
+import com.skillhub.domain.Skill;
 
 @Data
 public class SkillQueryRequest {

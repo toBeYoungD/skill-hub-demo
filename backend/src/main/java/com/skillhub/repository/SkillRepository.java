@@ -1,6 +1,6 @@
 package com.skillhub.repository;
 
-import com.skillhub.entity.Skill;
+import com.skillhub.domain.Skill;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Modifying;

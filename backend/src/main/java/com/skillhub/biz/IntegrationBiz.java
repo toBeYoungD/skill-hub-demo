@@ -1,6 +1,6 @@
 package com.skillhub.biz;
 
-import com.skillhub.dto.request.BatchCheckRequest;
+import com.skillhub.dto.BatchCheckRequest;
 import java.time.LocalDateTime;
 import java.util.Map;
 

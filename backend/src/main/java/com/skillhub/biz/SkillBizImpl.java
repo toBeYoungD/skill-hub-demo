@@ -1,10 +1,10 @@
 package com.skillhub.biz;
 
-import com.skillhub.auth.PermissionService;
-import com.skillhub.dto.request.SkillCreateRequest;
-import com.skillhub.dto.request.SkillQueryRequest;
-import com.skillhub.dto.request.SkillUpdateRequest;
-import com.skillhub.entity.*;
+import com.skillhub.security.PermissionService;
+import com.skillhub.dto.SkillCreateRequest;
+import com.skillhub.dto.SkillQueryRequest;
+import com.skillhub.dto.SkillUpdateRequest;
+import com.skillhub.domain.*;
 import com.skillhub.integration.SkillChangeListener;
 import com.skillhub.repository.*;
 import com.skillhub.service.NotificationService;
@@ -19,7 +19,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.List;
 
 @Service

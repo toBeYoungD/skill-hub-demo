@@ -1,7 +1,7 @@
 package com.skillhub.controller;
 
 import com.skillhub.biz.IntegrationBiz;
-import com.skillhub.dto.request.BatchCheckRequest;
+import com.skillhub.dto.BatchCheckRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;

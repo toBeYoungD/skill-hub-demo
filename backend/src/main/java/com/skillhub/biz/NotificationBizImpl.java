@@ -1,7 +1,7 @@
 package com.skillhub.biz;
 
-import com.skillhub.auth.PermissionService;
-import com.skillhub.entity.Notification;
+import com.skillhub.security.PermissionService;
+import com.skillhub.domain.Notification;
 import com.skillhub.repository.NotificationRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;

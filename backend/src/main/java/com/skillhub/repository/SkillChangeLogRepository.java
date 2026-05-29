@@ -1,6 +1,6 @@
 package com.skillhub.repository;
 
-import com.skillhub.entity.SkillChangeLog;
+import com.skillhub.domain.SkillChangeLog;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

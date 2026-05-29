@@ -1,6 +1,6 @@
 package com.skillhub.repository;
 
-import com.skillhub.entity.SkillVersion;
+import com.skillhub.domain.SkillVersion;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

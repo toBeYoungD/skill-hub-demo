@@ -1,6 +1,6 @@
 package com.skillhub.service;
 
-import com.skillhub.entity.Notification;
+import com.skillhub.domain.Notification;
 import com.skillhub.repository.NotificationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

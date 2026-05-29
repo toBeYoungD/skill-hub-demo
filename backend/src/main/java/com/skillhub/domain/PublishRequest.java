@@ -1,4 +1,4 @@
-package com.skillhub.entity;
+package com.skillhub.domain;
 
 import jakarta.persistence.*;
 import lombok.Data;

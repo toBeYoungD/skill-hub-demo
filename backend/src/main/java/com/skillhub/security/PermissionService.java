@@ -1,4 +1,4 @@
-package com.skillhub.auth;
+package com.skillhub.security;
 
 /**
  * 权限服务接口。

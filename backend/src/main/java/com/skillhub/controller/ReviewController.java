@@ -1,7 +1,7 @@
 package com.skillhub.controller;
 
 import com.skillhub.biz.SkillBiz;
-import com.skillhub.dto.request.*;
+import com.skillhub.dto.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;

@@ -1,7 +1,7 @@
 package com.skillhub.service;
 
-import com.skillhub.auth.PermissionService;
-import com.skillhub.entity.Skill;
+import com.skillhub.security.PermissionService;
+import com.skillhub.domain.Skill;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;

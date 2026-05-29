@@ -1,4 +1,4 @@
-package com.skillhub.dto.request;
+package com.skillhub.dto;
 
 import lombok.Data;
 import java.util.List;

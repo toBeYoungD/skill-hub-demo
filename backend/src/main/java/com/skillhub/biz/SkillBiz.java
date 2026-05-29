@@ -1,11 +1,11 @@
 package com.skillhub.biz;
 
-import com.skillhub.dto.request.SkillCreateRequest;
-import com.skillhub.dto.request.SkillQueryRequest;
-import com.skillhub.dto.request.SkillUpdateRequest;
-import com.skillhub.entity.PublishRequest;
-import com.skillhub.entity.Skill;
-import com.skillhub.entity.SkillVersion;
+import com.skillhub.dto.SkillCreateRequest;
+import com.skillhub.dto.SkillQueryRequest;
+import com.skillhub.dto.SkillUpdateRequest;
+import com.skillhub.domain.PublishRequest;
+import com.skillhub.domain.Skill;
+import com.skillhub.domain.SkillVersion;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.web.multipart.MultipartFile;

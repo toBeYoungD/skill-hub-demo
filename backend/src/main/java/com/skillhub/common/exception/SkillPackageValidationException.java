@@ -1,4 +1,4 @@
-package com.skillhub.exception;
+package com.skillhub.common.exception;
 
 import lombok.Getter;
 import java.util.List;

@@ -1,8 +1,8 @@
 package com.skillhub.controller;
 
 import com.skillhub.biz.SkillBiz;
-import com.skillhub.dto.request.*;
-import com.skillhub.entity.Skill;
+import com.skillhub.dto.*;
+import com.skillhub.domain.Skill;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;

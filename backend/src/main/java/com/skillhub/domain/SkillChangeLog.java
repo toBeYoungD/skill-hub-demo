@@ -1,4 +1,4 @@
-package com.skillhub.entity;
+package com.skillhub.domain;
 
 import jakarta.persistence.*;
 import lombok.Data;
@@ -7,29 +7,22 @@ import org.hibernate.annotations.CreationTimestamp;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "notification")
+@Table(name = "skill_change_log")
 @Data
-public class Notification {
+public class SkillChangeLog {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @Column(length = 100)
-    private String userId;
-
-    @Column(length = 50)
-    private String event;
-
-    private Long skillId;
-
-    @Column(length = 100)
     private String skillName;
 
-    @Column(length = 1000)
-    private String message;
+    @Column(length = 50)
+    private String changeType;
 
-    private Boolean read = false;
+    @Column(length = 2000)
+    private String details;
 
     @CreationTimestamp
     @Column(updatable = false)

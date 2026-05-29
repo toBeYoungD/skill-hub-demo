@@ -1,6 +1,6 @@
 # Skill Hub Demo
 
-公司内部技能管理系统后台，Java 17 + Spring Boot 3.1.5 + H2 内存数据库。
+技能管理系统后台，Java 17 + Spring Boot 3.1.5 + H2 内存数据库。
 
 ## 快速启动
 
@@ -75,12 +75,12 @@ DRAFT → PENDING_REVIEW → PUBLISHED ─→ DELISTED
 - **删除 vs 下架**：从未发布 → 物理删除；已发布 → 只能下架（逻辑删除，可恢复）
 - **保存**：设为草稿，本已是草稿时不刷新 updatedAt
 
-## 替换指南
+## 扩展点
 
-- `PermissionService` → 对接公司认证框架
-- `NotificationService` → 对接公司邮件/IM
-- `SkillChangeListener` → 对接消息队列
-- `SkillPackageValidator` → 自定义校验规则
+- `PermissionService` → 替换 Demo 实现，对接真实认证框架
+- `NotificationService` → 替换 Demo 实现，对接消息推送通道
+- `SkillChangeListener` → 替换 Demo 实现，对接消息队列
+- `SkillPackageValidator` → 替换 Demo 实现，自定义校验规则
 
 ## 测试
 

@@ -2,7 +2,7 @@
 
 ## 1. 项目概述
 
-公司内部技能管理系统后台，Java 17 + Spring Boot 3.1.5 + H2 内存数据库。
+技能管理系统后台，Java 17 + Spring Boot 3.1.5 + H2 内存数据库。
 
 ### 项目架构
 
@@ -14,8 +14,8 @@ dto/            ← 请求/响应 DTO
 repository/     ← JPA 数据访问
 service/        ← 可替换服务接口+实现
 config/         ← Spring 配置、CORS、拦截器、全局异常处理
-security/       ← 权限接口+Demo 实现（公司落地替换）
-integration/    ← 变更推送接口+Demo 实现（公司落地替换）
+security/       ← 权限接口+Demo 实现（可替换）
+integration/    ← 变更推送接口+Demo 实现（可替换）
 common/exception/ ← 业务异常
 util/           ← 工具类
 ```
@@ -288,7 +288,7 @@ DRAFT → PENDING_REVIEW → PUBLISHED → DELISTED
 | SkillChangeListener | integration/ | 变更事件，Demo 打日志 |
 | SkillPackageValidator | service/ | 上传格式校验 |
 
-公司落地时实现这些接口，替换掉 Demo 实现即可。
+实现这些接口，替换掉 Demo 实现即可。
 
 ---
 

@@ -11,6 +11,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 技能核心业务接口。
@@ -65,4 +66,13 @@ public interface SkillBiz {
 
     /** 某技能的审批历史 */
     List<PublishRequest> reviewHistory(Long skillId);
+
+    /** 按开发者筛选技能 */
+    Page<Skill> listByDeveloper(String developer, SkillQueryRequest request, Pageable pageable);
+
+    /** 管理台统计 */
+    Map<String, Object> adminStats();
+
+    /** 批量审批 */
+    List<Map<String, Object>> batchReview(String action, List<Long> ids, String reason);
 }

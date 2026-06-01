@@ -219,6 +219,15 @@ public class SkillBizImpl implements SkillBiz {
         notify(request.getApplicant(), "APPROVED", skill.getId(), skill.getName(),
                 "技能「" + skill.getName() + "」已通过审批并发布");
         changeListener.onSkillUpgraded(skill.getName(), newVersion);
+
+        // 审计日志
+        SkillChangeLog approveLog = new SkillChangeLog();
+        approveLog.setSkillName(skill.getName());
+        approveLog.setChangeType("APPROVED");
+        approveLog.setDetails("{\"version\":\"" + newVersion + "\",\"reviewer\":\"" + permissionService.currentUserId() + "\"}");
+        approveLog.setCreatedAt(LocalDateTime.now());
+        changeLogMapper.insert(approveLog);
+
         log.info("审批通过: skillId={}", skill.getId());
         return request;
     }
@@ -245,6 +254,15 @@ public class SkillBizImpl implements SkillBiz {
 
         notify(request.getApplicant(), "REJECTED", skill.getId(), skill.getName(),
                 "技能「" + skill.getName() + "」审批未通过，原因: " + reason);
+
+        // 审计日志
+        SkillChangeLog rejectLog = new SkillChangeLog();
+        rejectLog.setSkillName(skill.getName());
+        rejectLog.setChangeType("REJECTED");
+        rejectLog.setDetails("{\"reason\":\"" + reason + "\",\"reviewer\":\"" + permissionService.currentUserId() + "\"}");
+        rejectLog.setCreatedAt(LocalDateTime.now());
+        changeLogMapper.insert(rejectLog);
+
         log.info("审批拒绝: skillId={}", skill.getId());
         return request;
     }
@@ -295,6 +313,15 @@ public class SkillBizImpl implements SkillBiz {
         skill.setDelistedAt(null);
         skill.setUpdatedAt(LocalDateTime.now());
         skillMapper.update(skill);
+
+        // 审计日志
+        SkillChangeLog restoreLog = new SkillChangeLog();
+        restoreLog.setSkillName(skill.getName());
+        restoreLog.setChangeType("RESTORED");
+        restoreLog.setDetails("{}");
+        restoreLog.setCreatedAt(LocalDateTime.now());
+        changeLogMapper.insert(restoreLog);
+
         log.info("恢复: skillId={}", id);
     }
 
@@ -518,6 +545,76 @@ public class SkillBizImpl implements SkillBiz {
     private void deleteDir(java.io.File dir) {
         if (dir.isDirectory()) for (java.io.File f : dir.listFiles()) deleteDir(f);
         dir.delete();
+    }
+
+    // ==================== 开发者筛选 ====================
+
+    @Override
+    public Page<Skill> listByDeveloper(String developer, SkillQueryRequest request, Pageable pageable) {
+        int offset = (int) pageable.getOffset();
+        int limit = pageable.getPageSize();
+        String name = request.getName() != null && !request.getName().isEmpty() ? request.getName() : null;
+        String status = request.getStatus() != null ? request.getStatus().name() : null;
+
+        List<Skill> all = skillMapper.selectAll().stream()
+                .filter(s -> developer.equals(s.getDeveloper()))
+                .collect(Collectors.toList());
+
+        if (status != null)
+            all = all.stream().filter(s -> s.getStatus().name().equals(status)).collect(Collectors.toList());
+        if (name != null)
+            all = all.stream().filter(s -> s.getName().contains(name)).collect(Collectors.toList());
+
+        long total = all.size();
+        int end = Math.min(offset + limit, all.size());
+        List<Skill> page = offset < all.size() ? all.subList(offset, end) : List.of();
+        return new PageImpl<>(page, pageable, total);
+    }
+
+    // ==================== 管理台统计 ====================
+
+    @Override
+    public Map<String, Object> adminStats() {
+        List<Skill> allSkills = skillMapper.selectAll();
+        List<PublishRequest> allReviews = publishRequestMapper.selectAll();
+        LocalDateTime today = LocalDateTime.now().withHour(0).withMinute(0).withSecond(0);
+
+        Map<String, Object> stats = new HashMap<>();
+        stats.put("totalSkills", allSkills.size());
+        stats.put("publishedSkills", allSkills.stream()
+                .filter(s -> s.getStatus() == Skill.SkillStatus.PUBLISHED).count());
+        stats.put("pendingReviews", allReviews.stream()
+                .filter(r -> r.getStatus() == PublishRequest.RequestStatus.PENDING).count());
+        stats.put("approvedToday", allReviews.stream()
+                .filter(r -> r.getStatus() == PublishRequest.RequestStatus.APPROVED
+                        && r.getReviewedAt() != null && r.getReviewedAt().isAfter(today)).count());
+        stats.put("rejectedToday", allReviews.stream()
+                .filter(r -> r.getStatus() == PublishRequest.RequestStatus.REJECTED
+                        && r.getReviewedAt() != null && r.getReviewedAt().isAfter(today)).count());
+        stats.put("delistedTotal", allSkills.stream()
+                .filter(s -> Boolean.TRUE.equals(s.getDelisted())).count());
+        return stats;
+    }
+
+    // ==================== 批量审批 ====================
+
+    @Override
+    @Transactional
+    public List<Map<String, Object>> batchReview(String action, List<Long> ids, String reason) {
+        List<Map<String, Object>> results = new ArrayList<>();
+        for (Long id : ids) {
+            try {
+                if ("approve".equals(action)) {
+                    approveReview(id);
+                } else {
+                    rejectReview(id, reason);
+                }
+                results.add(Map.of("id", id, "success", true));
+            } catch (Exception e) {
+                results.add(Map.of("id", id, "success", false, "reason", e.getMessage()));
+            }
+        }
+        return results;
     }
 
     private String sanitize(String name) {

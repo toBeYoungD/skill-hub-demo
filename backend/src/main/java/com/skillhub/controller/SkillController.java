@@ -3,6 +3,7 @@ package com.skillhub.controller;
 import com.skillhub.biz.SkillBiz;
 import com.skillhub.dto.*;
 import com.skillhub.domain.Skill;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
@@ -58,6 +59,22 @@ public class SkillController {
     @GetMapping("/published")
     public ResponseEntity<Map<String, Object>> published() {
         return ok(skillBiz.list(new SkillQueryRequest(), Pageable.unpaged()).getContent());
+    }
+
+    @GetMapping("/my")
+    public ResponseEntity<Map<String, Object>> mySkills(
+            @RequestParam(required = false) String name,
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            HttpServletRequest request) {
+        String developer = request.getHeader("X-User-Id");
+        SkillQueryRequest req = new SkillQueryRequest();
+        req.setName(name);
+        req.setStatus(status != null ? Skill.SkillStatus.valueOf(status) : null);
+        Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
+        var result = skillBiz.listByDeveloper(developer, req, pageable);
+        return ok(result.getContent(), Map.of("total", result.getTotalElements(), "page", page, "size", size));
     }
 
     @PutMapping(value = "/{id}", consumes = "application/json")

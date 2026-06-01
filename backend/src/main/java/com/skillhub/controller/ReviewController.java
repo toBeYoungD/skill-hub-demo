@@ -1,11 +1,13 @@
 package com.skillhub.controller;
 
 import com.skillhub.biz.SkillBiz;
+import com.skillhub.domain.PublishRequest;
 import com.skillhub.dto.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -16,8 +18,19 @@ public class ReviewController {
     private final SkillBiz skillBiz;
 
     @GetMapping("/reviews")
-    public ResponseEntity<Map<String, Object>> listReviews(@RequestParam(required = false) String status) {
-        return ok(skillBiz.pendingReviews(status));
+    public ResponseEntity<Map<String, Object>> listReviews(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String applicant) {
+        List<PublishRequest> all = skillBiz.pendingReviews(status);
+        if (applicant != null) {
+            all = all.stream().filter(r -> applicant.equals(r.getApplicant())).toList();
+        }
+        return ok(all);
+    }
+
+    @GetMapping("/stats")
+    public ResponseEntity<Map<String, Object>> stats() {
+        return ResponseEntity.ok(Map.of("success", true, "data", skillBiz.adminStats()));
     }
 
     @PostMapping("/reviews/{id}/approve")
@@ -30,6 +43,16 @@ public class ReviewController {
     public ResponseEntity<Map<String, Object>> reject(@PathVariable Long id, @RequestBody RejectReviewRequest body) {
         skillBiz.rejectReview(id, body.getReason());
         return okMsg("审批已拒绝");
+    }
+
+    @PostMapping("/reviews/batch")
+    public ResponseEntity<Map<String, Object>> batchReview(@RequestBody Map<String, Object> body) {
+        String action = (String) body.get("action");
+        @SuppressWarnings("unchecked")
+        List<Integer> idsRaw = (List<Integer>) body.get("ids");
+        List<Long> ids = idsRaw.stream().map(Long::valueOf).toList();
+        String reason = (String) body.getOrDefault("reason", "");
+        return ResponseEntity.ok(Map.of("success", true, "data", skillBiz.batchReview(action, ids, reason)));
     }
 
     @PostMapping("/skills/{id}/delist")

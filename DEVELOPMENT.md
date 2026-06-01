@@ -17,7 +17,7 @@
 | 语言 | Java 17 |
 | 框架 | Spring Boot 3.1.5 |
 | 数据库 | H2（可替换为 MySQL） |
-| ORM | Spring Data JPA + Hibernate |
+| ORM | MyBatis 3.x + XML 映射 |
 | 构建 | Gradle 8.x（Gradle Wrapper 自带） |
 | 前端 | 原生 HTML/JS（仅用于开发期功能验证） |
 
@@ -54,12 +54,12 @@ backend/src/main/java/com/skillhub/
 │   ├── RejectReviewRequest.java
 │   ├── BatchCheckRequest.java
 │   └── BatchCheckSkillItem.java
-├── repository/                      # ★ JPA Repository
-│   ├── SkillRepository.java
-│   ├── SkillVersionRepository.java
-│   ├── PublishRequestRepository.java
-│   ├── NotificationRepository.java
-│   └── SkillChangeLogRepository.java
+├── dao/                              # ★ MyBatis Mapper 接口
+│   ├── SkillMapper.java
+│   ├── SkillVersionMapper.java
+│   ├── PublishRequestMapper.java
+│   ├── NotificationMapper.java
+│   └── SkillChangeLogMapper.java
 ├── service/                         # ★ 可替换服务 — 接口 + Demo 实现
 │   ├── SkillPackageValidator.java       # 技能包校验接口
 │   ├── DefaultSkillPackageValidator.java # 技能包校验 Demo 实现
@@ -123,10 +123,10 @@ public interface XxxBiz { List<Xxx> list(); }
 // 实现
 @Service @RequiredArgsConstructor
 public class XxxBizImpl implements XxxBiz {
-    private final XxxRepository repo;
+    private final XxxMapper xxxMapper;   // 注入 MyBatis Mapper
 
     @Override @Transactional
-    public List<Xxx> list() { return repo.findAll(); }
+    public List<Xxx> list() { return xxxMapper.selectAll(); }
 }
 ```
 
@@ -296,7 +296,7 @@ spring.datasource:
   driver-class-name: com.mysql.cj.jdbc.Driver
   username: xxx
   password: xxx
-spring.jpa.hibernate.ddl-auto: update   # 不要用 create-drop
+spring.sql.init.schema-locations: classpath:schema/schema-mysql.sql   # 使用 MySQL 方言的 DDL
 ```
 
 ### 5.3 H2 控制台
@@ -352,7 +352,7 @@ DRAFT ──发布──→ PENDING_REVIEW ──通过──→ PUBLISHED ─�
 ### 若要在此基础上添加新功能：
 
 1. 如需新实体 → 在 `domain/` 创建
-2. 如需数据访问 → 在 `repository/` 创建 Repository
+2. 如需数据访问 → 在 `dao/` 创建 Mapper 接口 + 在 `resources/dao/maps/` 创建同名 XML
 3. 如需业务逻辑 → 在 `biz/` 创建 `XxxBiz.java` + `XxxBizImpl.java`
 4. 如需暴露 API → 在 `controller/` 创建 Controller，注入 Biz
 5. 跑 `gradlew test` 确保不破坏已有测试

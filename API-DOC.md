@@ -11,7 +11,8 @@ controller/     ← 薄层：参数→DTO→Biz→响应包装，无业务逻辑
 biz/            ← 业务核心：接口+实现，全部逻辑在此
 domain/         ← 领域实体（Skill, SkillVersion, PublishRequest, Notification, SkillChangeLog）
 dto/            ← 请求/响应 DTO
-repository/     ← JPA 数据访问
+dao/            ← MyBatis Mapper 接口
+resources/dao/maps/ ← MyBatis XML 映射文件
 service/        ← 可替换服务接口+实现
 config/         ← Spring 配置、CORS、拦截器、全局异常处理
 security/       ← 权限接口+Demo 实现（可替换）
@@ -52,18 +53,19 @@ cd backend && gradlew.bat bootRun
 | delistedReason | String | 下架原因 |
 | delistedAt | LocalDateTime | 下架时间 |
 | delistedBy | String | 下架操作人 |
-| createdAt | LocalDateTime | 创建时间（@CreationTimestamp） |
+| createdAt | LocalDateTime | 创建时间（自动） |
 | updatedAt | LocalDateTime | 更新时间（手动维护） |
 | lastPublishedAt | LocalDateTime | 最近发布时间 |
 | versions | List\<SkillVersion\> | 版本列表（一对多，级联） |
-| canPublish | boolean (@Transient) | 计算字段：updatedAt > lastPublishedAt 或从未发布 |
+| canPublish | boolean (计算字段) | 计算字段：updatedAt > lastPublishedAt 或从未发布 |
 
 ### 2.2 SkillVersion（技能版本） — `com.skillhub.domain.SkillVersion`
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | id | Long | 主键 |
-| skill | Skill | 所属技能（@JsonIgnore） |
+| skill | Skill | 所属技能 |
+| skillId | Long | 关联技能 ID |
 | version | String | 版本号，整数（1, 2, 3...） |
 | packageUrl | String | 该版本技能包路径 |
 | changelog | String | 更新日志 |
@@ -73,7 +75,7 @@ cd backend && gradlew.bat bootRun
 | rolledBackFrom | String | 回滚来源版本号 |
 | skillNameSnapshot | String | 发布时的名称快照 |
 | skillDescriptionSnapshot | String | 发布时的描述快照 |
-| createdAt | LocalDateTime | @CreationTimestamp |
+| createdAt | LocalDateTime | 创建时间 |
 
 ### 2.3 PublishRequest（审批记录） — `com.skillhub.domain.PublishRequest`
 
@@ -88,7 +90,6 @@ cd backend && gradlew.bat bootRun
 | reviewer | String | 审批人 |
 | rejectReason | String | 拒绝理由 |
 | skillUpdatedAtSnapshot | LocalDateTime | 提交时 skill.updatedAt（并发校验） |
-| createdAt | LocalDateTime | @CreationTimestamp |
 | reviewedAt | LocalDateTime | 审批时间 |
 
 ### 2.4 Notification（通知） — `com.skillhub.domain.Notification`
@@ -102,7 +103,7 @@ cd backend && gradlew.bat bootRun
 | skillName | String | 技能名称 |
 | message | String | 通知内容 |
 | read | Boolean | 是否已读 |
-| createdAt | LocalDateTime | @CreationTimestamp |
+| createdAt | LocalDateTime | 自动 |
 
 ### 2.5 SkillChangeLog（变更日志） — `com.skillhub.domain.SkillChangeLog`
 
@@ -112,7 +113,7 @@ cd backend && gradlew.bat bootRun
 | skillName | String | 技能名称 |
 | changeType | String | DELISTED / UPGRADED |
 | details | String (JSON) | 变更详情 |
-| createdAt | LocalDateTime | @CreationTimestamp |
+| createdAt | LocalDateTime | 自动 |
 
 ---
 
@@ -310,9 +311,9 @@ storage/
 
 ## 7. 数据库
 
-H2 内存数据库，`ddl-auto: create-drop`，每次重启数据重置。
+H2 内存数据库，`schema.sql (启动时自动执行)`，每次重启数据重置。
 
-切换 MySQL：修改 `application.yml` 中 `datasource` 配置，`ddl-auto` 改为 `update`。
+切换 MySQL：修改 `application.yml` 中 `datasource` 配置，`改为手动管理 schema`。
 
 ---
 

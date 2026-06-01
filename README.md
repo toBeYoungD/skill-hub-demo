@@ -18,7 +18,8 @@ controller/     ← 薄层：参数 → DTO → Biz → 响应包装
 biz/            ← 业务核心：接口 + 实现，全部逻辑在此
 domain/         ← 领域实体
 dto/            ← 请求 DTO
-repository/     ← JPA 数据访问
+dao/            ← MyBatis Mapper 接口
+resources/dao/maps/ ← MyBatis XML 映射文件
 service/        ← 可替换服务（接口 + Demo）
 config/         ← Spring 配置、异常拦截
 security/       ← 权限（接口 + Demo）

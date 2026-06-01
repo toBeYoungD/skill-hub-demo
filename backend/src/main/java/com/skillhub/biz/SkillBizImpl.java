@@ -1,35 +1,37 @@
 package com.skillhub.biz;
 
-import com.skillhub.security.PermissionService;
+import com.skillhub.dao.*;
 import com.skillhub.dto.SkillCreateRequest;
 import com.skillhub.dto.SkillQueryRequest;
 import com.skillhub.dto.SkillUpdateRequest;
 import com.skillhub.domain.*;
 import com.skillhub.integration.SkillChangeListener;
-import com.skillhub.repository.*;
+import com.skillhub.security.PermissionService;
 import com.skillhub.service.NotificationService;
 import com.skillhub.service.SkillPackageValidator;
 import com.skillhub.util.LocalStorageUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
-import java.util.List;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class SkillBizImpl implements SkillBiz {
 
-    private final SkillRepository skillRepository;
-    private final SkillVersionRepository versionRepository;
-    private final PublishRequestRepository publishRequestRepository;
-    private final SkillChangeLogRepository changeLogRepository;
+    private final SkillMapper skillMapper;
+    private final SkillVersionMapper versionMapper;
+    private final PublishRequestMapper publishRequestMapper;
+    private final SkillChangeLogMapper changeLogMapper;
     private final LocalStorageUtil localStorageUtil;
     private final SkillPackageValidator skillPackageValidator;
     private final PermissionService permissionService;
@@ -41,7 +43,7 @@ public class SkillBizImpl implements SkillBiz {
     @Override
     @Transactional
     public Skill create(SkillCreateRequest request, MultipartFile packageFile) {
-        if (skillRepository.existsByName(request.getName())) {
+        if (skillMapper.existsByName(request.getName())) {
             throw new BizException("技能名称已存在: " + request.getName());
         }
 
@@ -59,7 +61,7 @@ public class SkillBizImpl implements SkillBiz {
         }
 
         skill.setUpdatedAt(LocalDateTime.now());
-        skill = skillRepository.save(skill);
+        skillMapper.insert(skill);
         log.info("创建技能: id={}, name={}", skill.getId(), skill.getName());
         return skill;
     }
@@ -69,10 +71,12 @@ public class SkillBizImpl implements SkillBiz {
     @Override
     @Transactional
     public Skill update(Long id, SkillUpdateRequest request, MultipartFile packageFile) {
-        Skill skill = skillRepository.findById(id).orElseThrow(() -> new BizException("技能不存在"));
+        Skill skill = skillMapper.selectById(id);
+        if (skill == null) throw new BizException("技能不存在");
 
         if (request.getName() != null && !request.getName().isEmpty()) {
-            if (!skill.getName().equals(request.getName()) && skillRepository.existsByName(request.getName())) {
+            if (!skill.getName().equals(request.getName())
+                    && skillMapper.countByNameExcludingId(request.getName(), id) > 0) {
                 throw new BizException("技能名称已存在: " + request.getName());
             }
             skill.setName(request.getName());
@@ -87,14 +91,17 @@ public class SkillBizImpl implements SkillBiz {
             skill.setPackageUrl(upload(packageFile));
         }
 
-        // 审批中编辑 → 自动作废旧申请
         if (skill.getStatus() == Skill.SkillStatus.PENDING_REVIEW) {
             cancelPending(skill.getId(), "技能内容已变更，旧申请自动作废");
             skill.setStatus(Skill.SkillStatus.DRAFT);
         }
 
         skill.setUpdatedAt(LocalDateTime.now());
-        skillRepository.save(skill);
+        skillMapper.update(skill);
+
+        // 重新加载 versions
+        skill.setVersions(versionMapper.selectBySkillId(id));
+
         log.info("更新技能: id={}", id);
         return skill;
     }
@@ -104,10 +111,10 @@ public class SkillBizImpl implements SkillBiz {
     @Override
     @Transactional
     public Skill saveAsDraft(Long id) {
-        Skill skill = skillRepository.findById(id).orElseThrow(() -> new BizException("技能不存在"));
+        Skill skill = skillMapper.selectById(id);
+        if (skill == null) throw new BizException("技能不存在");
         Skill.SkillStatus oldStatus = skill.getStatus();
 
-        // 如果正在审批中，保存回草稿时要作废旧审批
         if (oldStatus == Skill.SkillStatus.PENDING_REVIEW) {
             cancelPending(skill.getId(), "保存为草稿，审批申请自动作废");
         }
@@ -116,7 +123,8 @@ public class SkillBizImpl implements SkillBiz {
         if (oldStatus != Skill.SkillStatus.DRAFT) {
             skill.setUpdatedAt(LocalDateTime.now());
         }
-        skillRepository.save(skill);
+        skillMapper.update(skill);
+        skill.setVersions(versionMapper.selectBySkillId(id));
         return skill;
     }
 
@@ -125,7 +133,8 @@ public class SkillBizImpl implements SkillBiz {
     @Override
     @Transactional
     public void submitReview(Long skillId, String changelog) {
-        Skill skill = skillRepository.findById(skillId).orElseThrow(() -> new BizException("技能不存在"));
+        Skill skill = skillMapper.selectById(skillId);
+        if (skill == null) throw new BizException("技能不存在");
 
         if (skill.getStatus() != Skill.SkillStatus.DRAFT
                 && skill.getStatus() != Skill.SkillStatus.REJECTED
@@ -141,24 +150,27 @@ public class SkillBizImpl implements SkillBiz {
         req.setChangelog(changelog);
         req.setApplicant(permissionService.currentUserId());
         req.setSkillUpdatedAtSnapshot(skill.getUpdatedAt());
-        publishRequestRepository.save(req);
+        req.setCreatedAt(LocalDateTime.now());
+        publishRequestMapper.insert(req);
 
         skill.setStatus(Skill.SkillStatus.PENDING_REVIEW);
-        skillRepository.save(skill);
+        skillMapper.update(skill);
         log.info("提交审批: skillId={}", skillId);
     }
 
     @Override
     @Transactional
     public PublishRequest approveReview(Long requestId) {
-        PublishRequest request = publishRequestRepository.findById(requestId)
-                .orElseThrow(() -> new BizException("审批申请不存在"));
+        PublishRequest request = publishRequestMapper.selectById(requestId);
+        if (request == null) throw new BizException("审批申请不存在");
         if (request.getStatus() != PublishRequest.RequestStatus.PENDING) {
             throw new BizException("该申请不在待审批状态");
         }
 
-        Skill skill = skillRepository.findById(request.getSkillId())
-                .orElseThrow(() -> new BizException("技能不存在"));
+        Skill skill = skillMapper.selectById(request.getSkillId());
+        if (skill == null) throw new BizException("技能不存在");
+        List<SkillVersion> versions = versionMapper.selectBySkillId(skill.getId());
+        skill.setVersions(versions);
 
         // 并发校验
         if (request.getSkillUpdatedAtSnapshot() != null && skill.getUpdatedAt() != null
@@ -167,25 +179,23 @@ public class SkillBizImpl implements SkillBiz {
             request.setRejectReason("技能内容已变更，请重新提交审批");
             request.setReviewer(permissionService.currentUserId());
             request.setReviewedAt(LocalDateTime.now());
-            publishRequestRepository.save(request);
+            publishRequestMapper.update(request);
             skill.setStatus(Skill.SkillStatus.REJECTED);
-            skillRepository.save(skill);
+            skillMapper.update(skill);
             notify(request.getApplicant(), "EXPIRED", skill.getId(), skill.getName(),
                     "技能「" + skill.getName() + "」的审批申请因内容变更已过期，请重新提交");
             return request;
         }
 
         // 版本号递增
-        String latestVersion = null;
-        if (!skill.getVersions().isEmpty()) {
-            latestVersion = skill.getVersions().get(skill.getVersions().size() - 1).getVersion();
-        }
+        String latestVersion = versions.isEmpty() ? null
+                : versions.get(versions.size() - 1).getVersion();
         String newVersion = String.valueOf(latestVersion == null ? 1 : Integer.parseInt(latestVersion) + 1);
 
-        skill.getVersions().forEach(v -> v.setLatest(false));
+        versionMapper.unsetLatest(skill.getId());
 
         SkillVersion newVersionEntity = new SkillVersion();
-        newVersionEntity.setSkill(skill);
+        newVersionEntity.setSkillId(skill.getId());
         newVersionEntity.setVersion(newVersion);
         newVersionEntity.setPackageUrl(skill.getPackageUrl());
         newVersionEntity.setChangelog(request.getChangelog());
@@ -193,17 +203,18 @@ public class SkillBizImpl implements SkillBiz {
         newVersionEntity.setLatest(true);
         newVersionEntity.setSkillNameSnapshot(skill.getName());
         newVersionEntity.setSkillDescriptionSnapshot(skill.getDescription());
-        skill.getVersions().add(newVersionEntity);
+        newVersionEntity.setCreatedAt(LocalDateTime.now());
+        versionMapper.insert(newVersionEntity);
 
         skill.setStatus(Skill.SkillStatus.PUBLISHED);
         skill.setLastPublishedAt(LocalDateTime.now());
         skill.setUpdatedAt(LocalDateTime.now());
-        skillRepository.save(skill);
+        skillMapper.update(skill);
 
         request.setStatus(PublishRequest.RequestStatus.APPROVED);
         request.setReviewer(permissionService.currentUserId());
         request.setReviewedAt(LocalDateTime.now());
-        publishRequestRepository.save(request);
+        publishRequestMapper.update(request);
 
         notify(request.getApplicant(), "APPROVED", skill.getId(), skill.getName(),
                 "技能「" + skill.getName() + "」已通过审批并发布");
@@ -215,8 +226,8 @@ public class SkillBizImpl implements SkillBiz {
     @Override
     @Transactional
     public PublishRequest rejectReview(Long requestId, String reason) {
-        PublishRequest request = publishRequestRepository.findById(requestId)
-                .orElseThrow(() -> new BizException("审批申请不存在"));
+        PublishRequest request = publishRequestMapper.selectById(requestId);
+        if (request == null) throw new BizException("审批申请不存在");
         if (request.getStatus() != PublishRequest.RequestStatus.PENDING) {
             throw new BizException("该申请不在待审批状态");
         }
@@ -226,11 +237,11 @@ public class SkillBizImpl implements SkillBiz {
         request.setReviewer(permissionService.currentUserId());
         request.setReviewedAt(LocalDateTime.now());
 
-        Skill skill = skillRepository.findById(request.getSkillId())
-                .orElseThrow(() -> new BizException("技能不存在"));
+        Skill skill = skillMapper.selectById(request.getSkillId());
+        if (skill == null) throw new BizException("技能不存在");
         skill.setStatus(skill.getLastPublishedAt() != null ? Skill.SkillStatus.PUBLISHED : Skill.SkillStatus.REJECTED);
-        skillRepository.save(skill);
-        publishRequestRepository.save(request);
+        skillMapper.update(skill);
+        publishRequestMapper.update(request);
 
         notify(request.getApplicant(), "REJECTED", skill.getId(), skill.getName(),
                 "技能「" + skill.getName() + "」审批未通过，原因: " + reason);
@@ -241,10 +252,9 @@ public class SkillBizImpl implements SkillBiz {
     @Override
     public List<PublishRequest> pendingReviews(String status) {
         if (status != null) {
-            return publishRequestRepository.findAll().stream()
-                    .filter(r -> r.getStatus().name().equals(status)).toList();
+            return publishRequestMapper.selectByStatus(status);
         }
-        return publishRequestRepository.findAll();
+        return publishRequestMapper.selectAll();
     }
 
     // ==================== 下架 / 恢复 ====================
@@ -252,19 +262,21 @@ public class SkillBizImpl implements SkillBiz {
     @Override
     @Transactional
     public void delist(Long id, String reason) {
-        Skill skill = skillRepository.findById(id).orElseThrow(() -> new BizException("技能不存在"));
+        Skill skill = skillMapper.selectById(id);
+        if (skill == null) throw new BizException("技能不存在");
         skill.setStatus(Skill.SkillStatus.DELISTED);
         skill.setDelisted(true);
         skill.setDelistedReason(reason);
         skill.setDelistedAt(LocalDateTime.now());
         skill.setDelistedBy(permissionService.currentUserId());
-        skillRepository.save(skill);
+        skillMapper.update(skill);
 
         SkillChangeLog changeLog = new SkillChangeLog();
         changeLog.setSkillName(skill.getName());
         changeLog.setChangeType("DELISTED");
         changeLog.setDetails("{\"reason\":\"" + reason + "\"}");
-        changeLogRepository.save(changeLog);
+        changeLog.setCreatedAt(LocalDateTime.now());
+        changeLogMapper.insert(changeLog);
 
         changeListener.onSkillDelisted(skill.getName(), reason);
         notify(skill.getDeveloper(), "DELISTED", id, skill.getName(),
@@ -275,13 +287,14 @@ public class SkillBizImpl implements SkillBiz {
     @Override
     @Transactional
     public void restore(Long id) {
-        Skill skill = skillRepository.findById(id).orElseThrow(() -> new BizException("技能不存在"));
+        Skill skill = skillMapper.selectById(id);
+        if (skill == null) throw new BizException("技能不存在");
         skill.setStatus(Skill.SkillStatus.PUBLISHED);
         skill.setDelisted(false);
         skill.setDelistedReason(null);
         skill.setDelistedAt(null);
         skill.setUpdatedAt(LocalDateTime.now());
-        skillRepository.save(skill);
+        skillMapper.update(skill);
         log.info("恢复: skillId={}", id);
     }
 
@@ -289,26 +302,36 @@ public class SkillBizImpl implements SkillBiz {
 
     @Override
     public Page<Skill> list(SkillQueryRequest request, Pageable pageable) {
-        if (request.getStatus() != null) {
-            if (request.getName() != null && !request.getName().isEmpty()) {
-                return skillRepository.findAll(
-                        (root, query, cb) -> cb.and(
-                                cb.equal(root.get("status"), request.getStatus()),
-                                cb.like(root.get("name"), "%" + request.getName() + "%")), pageable);
-            }
-            return skillRepository.findAll(
-                    (root, query, cb) -> cb.equal(root.get("status"), request.getStatus()), pageable);
+        List<Skill> results;
+        long total;
+
+        String name = request.getName() != null && !request.getName().isEmpty() ? request.getName() : null;
+        String status = request.getStatus() != null ? request.getStatus().name() : null;
+        int offset = (int) pageable.getOffset();
+        int limit = pageable.getPageSize();
+
+        if (status != null && name != null) {
+            results = skillMapper.selectByStatusAndName(status, name, offset, limit);
+            total = skillMapper.countByStatusAndName(status, name);
+        } else if (status != null) {
+            results = skillMapper.selectByStatusOnly(status, offset, limit);
+            total = skillMapper.countByStatus(status);
+        } else if (name != null) {
+            results = skillMapper.selectByNameOnly(name, offset, limit);
+            total = skillMapper.countByName(name);
+        } else {
+            results = skillMapper.selectPage(offset, limit);
+            total = skillMapper.countAll();
         }
-        if (request.getName() != null && !request.getName().isEmpty()) {
-            return skillRepository.findAll(
-                    (root, query, cb) -> cb.like(root.get("name"), "%" + request.getName() + "%"), pageable);
-        }
-        return skillRepository.findAll(pageable);
+
+        return new PageImpl<>(results, pageable, total);
     }
 
     @Override
     public Skill detail(Long id) {
-        return skillRepository.findById(id).orElseThrow(() -> new BizException("技能不存在"));
+        Skill skill = skillMapper.selectById(id);
+        if (skill == null) throw new BizException("技能不存在");
+        return skill;
     }
 
     // ==================== 删除 ====================
@@ -316,18 +339,24 @@ public class SkillBizImpl implements SkillBiz {
     @Override
     @Transactional
     public void delete(Long id) {
-        Skill skill = skillRepository.findById(id).orElseThrow(() -> new BizException("技能不存在"));
+        Skill skill = skillMapper.selectById(id);
+        if (skill == null) throw new BizException("技能不存在");
         if (skill.getLastPublishedAt() != null) {
             throw new BizException("已发布过的技能不能物理删除，请使用下架功能");
         }
         if (skill.getStatus() != Skill.SkillStatus.DRAFT && skill.getStatus() != Skill.SkillStatus.REJECTED) {
             throw new BizException("只能删除草稿或未通过状态的技能");
         }
-        if (skill.getPackageUrl() != null) localStorageUtil.deleteFile(skill.getPackageUrl());
-        skill.getVersions().forEach(v -> {
+
+        // 删除关联版本
+        List<SkillVersion> versions = versionMapper.selectBySkillId(id);
+        for (SkillVersion v : versions) {
             if (v.getPackageUrl() != null) localStorageUtil.deleteFile(v.getPackageUrl());
-        });
-        skillRepository.delete(skill);
+            versionMapper.deleteById(v.getId());
+        }
+
+        if (skill.getPackageUrl() != null) localStorageUtil.deleteFile(skill.getPackageUrl());
+        skillMapper.deleteById(id);
     }
 
     // ==================== 版本管理 ====================
@@ -335,19 +364,22 @@ public class SkillBizImpl implements SkillBiz {
     @Override
     @Transactional
     public SkillVersion rollback(Long skillId, Long versionId) {
-        Skill skill = skillRepository.findById(skillId).orElseThrow(() -> new BizException("技能不存在"));
-        SkillVersion target = skill.getVersions().stream()
-                .filter(v -> v.getId().equals(versionId)).findFirst()
+        Skill skill = skillMapper.selectById(skillId);
+        if (skill == null) throw new BizException("技能不存在");
+        List<SkillVersion> versions = versionMapper.selectBySkillId(skillId);
+        skill.setVersions(versions);
+
+        SkillVersion target = versions.stream().filter(v -> v.getId().equals(versionId)).findFirst()
                 .orElseThrow(() -> new BizException("版本不存在"));
 
-        String latestVersion = skill.getVersions().isEmpty() ? null
-                : skill.getVersions().get(skill.getVersions().size() - 1).getVersion();
+        String latestVersion = versions.isEmpty() ? null
+                : versions.get(versions.size() - 1).getVersion();
         String newVersion = String.valueOf(latestVersion == null ? 1 : Integer.parseInt(latestVersion) + 1);
 
-        skill.getVersions().forEach(v -> v.setLatest(false));
+        versionMapper.unsetLatest(skillId);
 
         SkillVersion rollbackVersion = new SkillVersion();
-        rollbackVersion.setSkill(skill);
+        rollbackVersion.setSkillId(skillId);
         rollbackVersion.setVersion(newVersion);
         rollbackVersion.setPackageUrl(target.getPackageUrl());
         rollbackVersion.setChangelog("从版本 " + target.getVersion() + " 回滚");
@@ -355,52 +387,62 @@ public class SkillBizImpl implements SkillBiz {
         rollbackVersion.setLatest(true);
         rollbackVersion.setRollback(true);
         rollbackVersion.setRolledBackFrom(target.getVersion());
+        rollbackVersion.setCreatedAt(LocalDateTime.now());
+        versionMapper.insert(rollbackVersion);
 
-        skill.getVersions().add(rollbackVersion);
         if (target.getSkillNameSnapshot() != null) skill.setName(target.getSkillNameSnapshot());
         if (target.getSkillDescriptionSnapshot() != null) skill.setDescription(target.getSkillDescriptionSnapshot());
         if (target.getPackageUrl() != null) skill.setPackageUrl(target.getPackageUrl());
         skill.setLastPublishedAt(LocalDateTime.now());
-        skillRepository.save(skill);
+        skillMapper.update(skill);
         return rollbackVersion;
     }
 
     @Override
     @Transactional
     public void deleteVersion(Long skillId, Long versionId) {
-        Skill skill = skillRepository.findById(skillId).orElseThrow(() -> new BizException("技能不存在"));
-        SkillVersion version = skill.getVersions().stream()
-                .filter(v -> v.getId().equals(versionId)).findFirst()
+        Skill skill = skillMapper.selectById(skillId);
+        if (skill == null) throw new BizException("技能不存在");
+        List<SkillVersion> versions = versionMapper.selectBySkillId(skillId);
+
+        SkillVersion version = versions.stream().filter(v -> v.getId().equals(versionId)).findFirst()
                 .orElseThrow(() -> new BizException("版本不存在"));
 
         if (version.isLatest() && version.getStatus() == SkillVersion.VersionStatus.PUBLISHED) {
             throw new BizException("不能删除最新的已发布版本");
         }
         if (version.getPackageUrl() != null) localStorageUtil.deleteFile(version.getPackageUrl());
-        skill.getVersions().remove(version);
-        if (!skill.getVersions().isEmpty()) {
-            skill.getVersions().get(skill.getVersions().size() - 1).setLatest(true);
+        versionMapper.deleteById(versionId);
+
+        // 重设 latest
+        versions.remove(version);
+        if (!versions.isEmpty()) {
+            SkillVersion last = versions.get(versions.size() - 1);
+            last.setLatest(true);
+            versionMapper.update(last);
         }
-        skillRepository.save(skill);
     }
 
     @Override
     public List<PublishRequest> reviewHistory(Long skillId) {
-        return publishRequestRepository.findBySkillIdOrderByCreatedAtDesc(skillId);
+        return publishRequestMapper.selectBySkillIdOrderByCreatedAtDesc(skillId);
     }
 
     // ==================== 导出 ====================
 
     @Override
     public java.io.File export(Long skillId) {
-        Skill skill = detail(skillId);
+        Skill skill = skillMapper.selectById(skillId);
+        if (skill == null) throw new BizException("技能不存在");
+        List<SkillVersion> versions = versionMapper.selectBySkillId(skillId);
+
         try {
             java.io.File tempDir = new java.io.File(System.getProperty("java.io.tmpdir"), "skill-" + skillId);
             if (tempDir.exists()) deleteDir(tempDir);
             tempDir.mkdirs();
 
-            String latestVer = skill.getVersions().isEmpty() ? "1"
-                    : skill.getVersions().get(skill.getVersions().size() - 1).getVersion();
+            String latestVer = versions.isEmpty() ? "1"
+                    : versions.get(versions.size() - 1).getVersion();
 
             StringBuilder md = new StringBuilder();
             md.append("---\nname: ").append(sanitize(skill.getName()))
@@ -412,7 +454,7 @@ public class SkillBizImpl implements SkillBiz {
               .append("\n- 状态: ").append(skill.getStatus())
               .append("\n- 下载: ").append(skill.getDownloadCount())
               .append(" | 使用: ").append(skill.getUseCount()).append("\n\n## 版本历史\n\n");
-            skill.getVersions().forEach(v -> {
+            versions.forEach(v -> {
                 md.append("- v").append(v.getVersion()).append(" (").append(v.getStatus()).append(")");
                 if (v.isRollback()) md.append(" [回滚]");
                 if (v.getChangelog() != null) md.append(": ").append(v.getChangelog());
@@ -436,7 +478,7 @@ public class SkillBizImpl implements SkillBiz {
         }
     }
 
-    // ==================== 内部工具方法 ====================
+    // ==================== 内部工具 ====================
 
     private String upload(MultipartFile file) {
         try { return localStorageUtil.uploadPackage(file); }
@@ -444,14 +486,7 @@ public class SkillBizImpl implements SkillBiz {
     }
 
     private void cancelPending(Long skillId, String reason) {
-        publishRequestRepository.findBySkillIdOrderByCreatedAtDesc(skillId).stream()
-                .filter(r -> r.getStatus() == PublishRequest.RequestStatus.PENDING)
-                .forEach(r -> {
-                    r.setStatus(PublishRequest.RequestStatus.REJECTED);
-                    r.setRejectReason(reason);
-                    r.setReviewedAt(LocalDateTime.now());
-                    publishRequestRepository.save(r);
-                });
+        publishRequestMapper.cancelPendingBySkillId(skillId, reason, LocalDateTime.now());
     }
 
     private void notify(String userId, String event, Long skillId, String skillName, String message) {

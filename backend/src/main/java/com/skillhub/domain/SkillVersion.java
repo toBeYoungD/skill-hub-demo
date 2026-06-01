@@ -1,57 +1,32 @@
 package com.skillhub.domain;
 
-import jakarta.persistence.*;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Data;
-import org.hibernate.annotations.CreationTimestamp;
-
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name = "skill_version")
 @Data
 public class SkillVersion {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+    private Long skillId;
 
     @JsonIgnore
-    @ManyToOne
-    @JoinColumn(name = "skill_id", nullable = false)
     private Skill skill;
 
-    @Column(nullable = false)
     private String version;
-
     private String packageUrl;
-
     private String manifestUrl;
-
-    @Column(length = 500)
     private String changelog;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
     private VersionStatus status = VersionStatus.DRAFT;
-
-    @Column(name = "is_latest")
-    private boolean isLatest = false;
-
-    @Column(name = "is_rollback")
-    private boolean isRollback = false;
-
-    @Column(name = "rolled_back_from")
+    private boolean latest = false;
+    private boolean rollback = false;
     private String rolledBackFrom;
 
-    @Column(length = 100)
+    // 注意: 以下三个命名对应MyBatis映射的 skill_name_snapshot / skill_description_snapshot
+    // 但Java命名保持驼峰。MyBatis mapUnderscoreToCamelCase 和 XML 可覆盖
     private String skillNameSnapshot;
-
-    @Column(length = 1000)
     private String skillDescriptionSnapshot;
 
-    @CreationTimestamp
-    @Column(updatable = false)
     private LocalDateTime createdAt;
 
     public enum VersionStatus {

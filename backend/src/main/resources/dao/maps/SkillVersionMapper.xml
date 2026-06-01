@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.skillhub.dao.SkillVersionMapper">
+
+    <resultMap id="SkillVersionMap" type="com.skillhub.domain.SkillVersion">
+        <id     property="id"                     column="id"/>
+        <result property="version"                column="version"/>
+        <result property="packageUrl"             column="package_url"/>
+        <result property="manifestUrl"            column="manifest_url"/>
+        <result property="changelog"              column="changelog"/>
+        <result property="status"                 column="status"/>
+        <result property="latest"                 column="is_latest"/>
+        <result property="rollback"               column="is_rollback"/>
+        <result property="rolledBackFrom"         column="rolled_back_from"/>
+        <result property="skillNameSnapshot"      column="skill_name_snapshot"/>
+        <result property="skillDescriptionSnapshot" column="skill_description_snapshot"/>
+        <result property="createdAt"              column="created_at"/>
+        <result property="skillId"                column="skill_id"/>
+    </resultMap>
+
+    <sql id="versionColumns">
+        id, skill_id, version, package_url, manifest_url, changelog, status,
+        is_latest, is_rollback, rolled_back_from, skill_name_snapshot,
+        skill_description_snapshot, created_at
+    </sql>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO skill_version (skill_id, version, package_url, manifest_url, changelog,
+                                   status, is_latest, is_rollback, rolled_back_from,
+                                   skill_name_snapshot, skill_description_snapshot, created_at)
+        VALUES (#{skillId}, #{version}, #{packageUrl}, #{manifestUrl}, #{changelog},
+                #{status}, #{latest}, #{rollback}, #{rolledBackFrom},
+                #{skillNameSnapshot}, #{skillDescriptionSnapshot}, #{createdAt})
+    </insert>
+
+    <select id="selectById" resultMap="SkillVersionMap">
+        SELECT <include refid="versionColumns"/> FROM skill_version WHERE id = #{id}
+    </select>
+
+    <update id="update">
+        UPDATE skill_version
+        SET package_url = #{packageUrl}, manifest_url = #{manifestUrl},
+            changelog = #{changelog}, status = #{status},
+            is_latest = #{latest}, is_rollback = #{rollback},
+            rolled_back_from = #{rolledBackFrom},
+            skill_name_snapshot = #{skillNameSnapshot},
+            skill_description_snapshot = #{skillDescriptionSnapshot}
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM skill_version WHERE id = #{id}
+    </delete>
+
+    <select id="selectBySkillId" resultMap="SkillVersionMap">
+        SELECT <include refid="versionColumns"/> FROM skill_version
+        WHERE skill_id = #{skillId} ORDER BY created_at ASC
+    </select>
+
+    <select id="selectBySkillIdOrderByCreatedAtDesc" resultMap="SkillVersionMap">
+        SELECT <include refid="versionColumns"/> FROM skill_version
+        WHERE skill_id = #{skillId} ORDER BY created_at DESC
+    </select>
+
+    <select id="selectBySkillIdAndVersion" resultMap="SkillVersionMap">
+        SELECT <include refid="versionColumns"/> FROM skill_version
+        WHERE skill_id = #{skillId} AND version = #{version}
+    </select>
+
+    <update id="unsetLatest">
+        UPDATE skill_version SET is_latest = false WHERE skill_id = #{skillId}
+    </update>
+
+</mapper>

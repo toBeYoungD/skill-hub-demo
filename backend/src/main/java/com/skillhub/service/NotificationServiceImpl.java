@@ -1,17 +1,19 @@
 package com.skillhub.service;
 
+import com.skillhub.dao.NotificationMapper;
 import com.skillhub.domain.Notification;
-import com.skillhub.repository.NotificationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+
+import java.time.LocalDateTime;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class NotificationServiceImpl implements NotificationService {
 
-    private final NotificationRepository notificationRepository;
+    private final NotificationMapper notificationMapper;
 
     @Override
     public void notify(String userId, String event, Long skillId, String skillName, String message) {
@@ -22,6 +24,7 @@ public class NotificationServiceImpl implements NotificationService {
         n.setSkillId(skillId);
         n.setSkillName(skillName);
         n.setMessage(message);
-        notificationRepository.save(n);
+        n.setCreatedAt(LocalDateTime.now());
+        notificationMapper.insert(n);
     }
 }

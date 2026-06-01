@@ -12,29 +12,34 @@ spring:
   application:
     name: skill-hub-demo
 
+  datasource:
+    url: jdbc:h2:mem:skillhub;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  sql:
+    init:
+      schema-locations: classpath:schema/schema.sql
+      mode: always
+
   servlet:
     multipart:
       enabled: true
       max-file-size: 500MB
       max-request-size: 500MB
-    url: jdbc:h2:mem:skillhub;DB_CLOSE_DELAY=-1
-    driver-class-name: org.h2.Driver
-    username: sa
-    password:
 
   h2:
     console:
       enabled: true
       path: /h2-console
 
-  jpa:
-    hibernate:
-      ddl-auto: create-drop
-    show-sql: true
-    properties:
-      hibernate:
-        format_sql: true
-        dialect: org.hibernate.dialect.H2Dialect
+# MyBatis 配置
+mybatis:
+  mapper-locations: classpath:dao/maps/*.xml
+  type-aliases-package: com.skillhub.domain
+  configuration:
+    map-underscore-to-camel-case: true
 
 # 本地文件存储配置
 storage:
@@ -48,7 +53,6 @@ storage:
 logging:
   level:
     com.skillhub: debug
-    org.hibernate.SQL: debug
 
 # 可见性开关
 skill:

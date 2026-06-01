@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.skillhub.dao.PublishRequestMapper">
+
+    <resultMap id="PublishRequestMap" type="com.skillhub.domain.PublishRequest">
+        <id     property="id"                     column="id"/>
+        <result property="skillId"                column="skill_id"/>
+        <result property="skillName"              column="skill_name"/>
+        <result property="changelog"              column="changelog"/>
+        <result property="status"                 column="status"/>
+        <result property="applicant"              column="applicant"/>
+        <result property="reviewer"               column="reviewer"/>
+        <result property="rejectReason"           column="reject_reason"/>
+        <result property="skillUpdatedAtSnapshot" column="skill_updated_at_snapshot"/>
+        <result property="createdAt"              column="created_at"/>
+        <result property="reviewedAt"             column="reviewed_at"/>
+    </resultMap>
+
+    <sql id="prColumns">
+        id, skill_id, skill_name, changelog, status, applicant, reviewer,
+        reject_reason, skill_updated_at_snapshot, created_at, reviewed_at
+    </sql>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO publish_request (skill_id, skill_name, changelog, status, applicant,
+                                     skill_updated_at_snapshot, created_at)
+        VALUES (#{skillId}, #{skillName}, #{changelog}, #{status}, #{applicant},
+                #{skillUpdatedAtSnapshot}, #{createdAt})
+    </insert>
+
+    <select id="selectById" resultMap="PublishRequestMap">
+        SELECT <include refid="prColumns"/> FROM publish_request WHERE id = #{id}
+    </select>
+
+    <update id="update">
+        UPDATE publish_request
+        SET status = #{status}, reviewer = #{reviewer}, reject_reason = #{rejectReason},
+            reviewed_at = #{reviewedAt}
+        WHERE id = #{id}
+    </update>
+
+    <select id="selectAll" resultMap="PublishRequestMap">
+        SELECT <include refid="prColumns"/> FROM publish_request ORDER BY created_at DESC
+    </select>
+
+    <select id="selectBySkillIdOrderByCreatedAtDesc" resultMap="PublishRequestMap">
+        SELECT <include refid="prColumns"/> FROM publish_request
+        WHERE skill_id = #{skillId} ORDER BY created_at DESC
+    </select>
+
+    <select id="selectByStatus" resultMap="PublishRequestMap">
+        SELECT <include refid="prColumns"/> FROM publish_request
+        WHERE status = #{status} ORDER BY created_at DESC
+    </select>
+
+    <update id="cancelPendingBySkillId">
+        UPDATE publish_request
+        SET status = 'REJECTED', reject_reason = #{reason}, reviewed_at = #{reviewedAt}
+        WHERE skill_id = #{skillId} AND status = 'PENDING'
+    </update>
+
+</mapper>

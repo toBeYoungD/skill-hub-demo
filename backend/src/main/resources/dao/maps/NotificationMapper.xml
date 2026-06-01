@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.skillhub.dao.NotificationMapper">
+
+    <resultMap id="NotificationMap" type="com.skillhub.domain.Notification">
+        <id     property="id"        column="id"/>
+        <result property="userId"    column="user_id"/>
+        <result property="event"     column="event"/>
+        <result property="skillId"   column="skill_id"/>
+        <result property="skillName" column="skill_name"/>
+        <result property="message"   column="message"/>
+        <result property="read"      column="read"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO notification (user_id, event, skill_id, skill_name, message, created_at)
+        VALUES (#{userId}, #{event}, #{skillId}, #{skillName}, #{message}, #{createdAt})
+    </insert>
+
+    <select id="selectByUserIdOrderByCreatedAtDesc" resultMap="NotificationMap">
+        SELECT * FROM notification WHERE user_id = #{userId} ORDER BY created_at DESC
+    </select>
+
+    <select id="selectByUserIdAndReadFalse" resultMap="NotificationMap">
+        SELECT * FROM notification WHERE user_id = #{userId} AND (read IS NULL OR read = false)
+        ORDER BY created_at DESC
+    </select>
+
+    <update id="updateRead">
+        UPDATE notification SET read = #{read} WHERE id = #{id}
+    </update>
+
+    <update id="markAllRead">
+        UPDATE notification SET read = true WHERE user_id = #{userId} AND (read IS NULL OR read = false)
+    </update>
+
+</mapper>

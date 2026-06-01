@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.skillhub.dao.SkillChangeLogMapper">
+
+    <resultMap id="SkillChangeLogMap" type="com.skillhub.domain.SkillChangeLog">
+        <id     property="id"         column="id"/>
+        <result property="skillName"  column="skill_name"/>
+        <result property="changeType" column="change_type"/>
+        <result property="details"    column="details"/>
+        <result property="createdAt"  column="created_at"/>
+    </resultMap>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO skill_change_log (skill_name, change_type, details, created_at)
+        VALUES (#{skillName}, #{changeType}, #{details}, #{createdAt})
+    </insert>
+
+    <select id="selectByCreatedAtAfter" resultMap="SkillChangeLogMap">
+        SELECT * FROM skill_change_log WHERE created_at > #{since} ORDER BY created_at ASC
+    </select>
+
+</mapper>
